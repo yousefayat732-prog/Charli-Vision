@@ -41,6 +41,10 @@ public partial class MainWindow : Window
     private LyricResult _lyricResult=LyricResult.Unavailable("Noch keine Suche");
     private string _plainLyrics="";
     private double _plainReaderElapsed,_plainScrollPrevious;
+    private int _lyricsRecoveryAttempts;
+    private DateTimeOffset? _lyricsNextRetryAt;
+    private string _lyricsPipelineState="Idle";
+    private string _lyricsLastError="";
     private int _activeLyricIndex = -100;
     private AlbumPalette _appliedPalette = AlbumPalette.Default;
     private readonly ChromaticDesignEngine _chromatic=new();
@@ -63,6 +67,9 @@ public partial class MainWindow : Window
     private double _lastTime, _lastDiagnostic, _lastAudioRetry, _lastOcclusionProbe;
     private bool _fullyOccluded;
     private readonly bool _diagnostics = Environment.GetEnvironmentVariable("CHARLI_VISION_DIAGNOSTICS") == "1";
+    private readonly bool _v6CaptureMode =
+        Environment.GetEnvironmentVariable("CHARLI_VISION_V6_CAPTURE") == "1";
+    private bool _v6CaptureTaken;
     private SettingsWindow? _settingsWindow;
     private GlassMenuWindow? _glassMenu;
     private HotkeyManager? _hotkeys;
@@ -211,8 +218,11 @@ public partial class MainWindow : Window
         _lyricResult=LyricResult.Unavailable(_settings.AutoLyricsSearch?
             "Automatische Suche":"Automatische Suche deaktiviert");
         _plainLyrics="";_plainReaderElapsed=0;
-        _activeLyricIndex=-100;
+        _lyricsRecoveryAttempts=0;_lyricsNextRetryAt=null;
         bool validSong=!state.Title.Equals("CHARLI VISION",StringComparison.OrdinalIgnoreCase);
+        _lyricsPipelineState=validSong?"Searching":"Offline";
+        _lyricsLastError="";
+        _activeLyricIndex=-100;
         ClearLyrics();
         var token=_lyricsCancellation.Token;
         if(_settings.AutoLyricsSearch || _lyricsService.Library.HasImport(_songKey))
@@ -237,9 +247,17 @@ public partial class MainWindow : Window
     {
         if(state.Title.Equals("CHARLI VISION",StringComparison.OrdinalIgnoreCase))return;
         try {
+            _lyricsPipelineState="Loading";
             var result=await Task.Run(()=>_lyricsService.GetAsync(
                 state.Title,state.Artist,state.Album,state.Duration,token,force),token);
             if(token.IsCancellationRequested||_closing||_displayKey!=identity)return;
+            _lyricsPipelineState=result.Quality switch{
+                "Word"=>"WordSynced","Line"=>"LineSynced","Plain"=>"PlainLyrics",
+                _=>result.Status.Contains("Rate",StringComparison.OrdinalIgnoreCase)||
+                   result.Status.Contains("nicht erreichbar",StringComparison.OrdinalIgnoreCase)?
+                   "ProviderError":"NotFound"
+            };
+            _lyricsLastError=result.Quality=="Keine"?result.Status:"";
             _lyricResult=result;
             _plainLyrics=result.PlainText??"";
             _plainReaderElapsed=0;
@@ -250,6 +268,8 @@ public partial class MainWindow : Window
                 ClearLyrics();
                 if(result.Quality=="Plain" && _settings.PlainLyricsReader)
                     ShowPlainLyrics();
+                if(result.Quality=="Keine" && _settings.AutoLyricsSearch)
+                    _=ScheduleLyricsRecoveryAsync(state,identity,token,result.Status);
             }else {
                 UpdateLyrics(); // First usable line must appear without waiting for word upgrades.
                 if(!result.Lines.Any(line=>line.Words is {Count:>0})){
@@ -267,8 +287,32 @@ public partial class MainWindow : Window
         } catch(OperationCanceledException){}
           catch(Exception ex) {
               SettingsStore.Log(ex);
-              if(!token.IsCancellationRequested&&_displayKey==identity)ClearLyrics();
+              if(!token.IsCancellationRequested&&_displayKey==identity){
+                  _lyricsPipelineState="ProviderError";
+                  _lyricsLastError=ex.GetType().Name;
+                  ClearLyrics();
+                  if(_settings.AutoLyricsSearch)
+                      _=ScheduleLyricsRecoveryAsync(state,identity,token,
+                          "Lyrics-Anbieter derzeit nicht erreichbar");
+              }
           }
+    }
+    private async Task ScheduleLyricsRecoveryAsync(TrackState state,string identity,
+        CancellationToken token,string status)
+    {
+        if(_closing || token.IsCancellationRequested ||
+            identity!=_displayKey || !_settings.AutoLyricsSearch)return;
+        var delay=LyricsRecoveryPolicy.Delay(++_lyricsRecoveryAttempts,status);
+        _lyricsNextRetryAt=DateTimeOffset.UtcNow+delay;
+        try {
+            await Task.Delay(delay,token);
+            if(_closing || token.IsCancellationRequested || identity!=_displayKey ||
+                !_settings.AutoLyricsSearch || _lyricResult.Quality!="Keine")return;
+            _lyricsNextRetryAt=null;
+            // Explicit retry bypasses a temporary negative cache, never
+            // bypasses a provider-imposed HTTP 429 retry-after cooldown.
+            await LoadLyricsAsync(state,identity,token,force:true);
+        }catch(OperationCanceledException){}
     }
     internal string CurrentTrackForAlignment=>
         _lastTrack is null ||
@@ -381,6 +425,8 @@ public partial class MainWindow : Window
         _lyricsCancellation?.Dispose();
         _lyricsCancellation=new CancellationTokenSource();
         _lyricsService.Invalidate(_songKey);
+        _lyricsRecoveryAttempts=0;_lyricsNextRetryAt=null;
+        _lyricsPipelineState="Searching";_lyricsLastError="";
         _lines=Array.Empty<LyricLine>();
         _plainLyrics="";
         _lyricResult=LyricResult.Unavailable("Erneute Suche");
@@ -541,15 +587,39 @@ public partial class MainWindow : Window
         }
         return Math.Clamp(milliseconds,55,190);
     }
+    private void ShowUpcomingSourceLine()
+    {
+        // Show actual source text, without pretending it is timed, while the
+        // Spotify clock is unavailable or before the first genuine cue.
+        if(_activeLyricIndex==-1 && LyricsRendererVisible)return;
+        string first=_lines.FirstOrDefault(l=>!string.IsNullOrWhiteSpace(l.Text))?.Text??"";
+        if(first.Length==0){ClearLyrics(false);return;}
+        _karaoke.Clear();
+        PlainLyricsReader.Visibility=Visibility.Collapsed;
+        ActiveLyric.Visibility=Visibility.Collapsed;
+        ActiveLyric.Text="";
+        PreviousLyric.Visibility=Visibility.Collapsed;
+        PreviousLyric.Text="";
+        NextLyric.Visibility=Visibility.Visible;
+        NextLyric.Text=first;
+        NextLyric.FontSize=(first.Length>75?17:22)*_settings.LyricsScale;
+        NextLyric.Opacity=.64;
+        TitleRegion.Visibility=Visibility.Visible;
+        _activeLyricIndex=-1;
+    }
     private void UpdateLyrics()
     {
         if(_lines.Count==0)return;
         var position=_syncSettings.Apply(_media.Clock.Estimated(),_songKey,_deviceKey);
         if(position is null){
-            if(TitleRegion.Visibility!=Visibility.Collapsed)ClearLyrics();
+            ShowUpcomingSourceLine();
             return;
         }
         int index=LyricsService.ActiveAt(_lines,position.Value);
+        if(index<0){
+            ShowUpcomingSourceLine();
+            return;
+        }
         if(index==_activeLyricIndex){
             if(index>=0 && _lines[index].Words is {Count:>0})
                 _karaoke.Update(position.Value);
@@ -562,6 +632,9 @@ public partial class MainWindow : Window
         }
         string previous=index>0?_lines[index-1].Text:"";
         string next=index+1<_lines.Count?_lines[index+1].Text:"";
+        PlainLyricsReader.Visibility=Visibility.Collapsed;
+        PreviousLyric.Visibility=Visibility.Visible;
+        NextLyric.Visibility=Visibility.Visible;
         PreviousLyric.Text=previous;
         NextLyric.Text=next;
         PreviousLyric.FontSize=(previous.Length>75?17:22)*_settings.LyricsScale;
@@ -745,16 +818,48 @@ public partial class MainWindow : Window
         if(_forceThemeRefresh)ApplyTheme();
         UpdatePlainReader(dt);
         UpdateLyrics();
+        if(_v6CaptureMode && !_v6CaptureTaken && LyricsRendererVisible)
+            CaptureV6LyricsPreview();
         if (_diagnostics && now-_lastDiagnostic > 2) {
             _lastDiagnostic=now;
             var stats=_framePacing.GetSample();
             try {
                 Directory.CreateDirectory(SettingsStore.DirectoryPath);
                 File.WriteAllText(Path.Combine(SettingsStore.DirectoryPath,"test-status.txt"),
-                    $"SpotifyPlaying={_playing}; LoopbackAvailable={_audio.Available}; Peak={levels?.Max():F4}; AudioRms={_audio.LastRms:F5}; AudioGain={_audio.NormalizationGain:F1}; VinylRenderMs={Vinyl.LastRenderMs:F2}; GrooveCount={Vinyl.GrooveCount}; VinylQuality={Vinyl.Quality}; FullyOccluded={_fullyOccluded}; ClockValid={_media.Clock.Valid}; ClockSec={_media.Clock.Estimated()?.TotalSeconds:F2}; DurationSec={_media.Clock.Duration.TotalSeconds:F0}; LyricsCount={_lines.Count}; WordSyncedLines={_lines.Count(x=>x.Words is {Count:>0})}; LastWord={_karaoke.CurrentWordIndex}; ClockSampleAgeMs={_media.Clock.SampleAgeMs:F1}; ClockErrorMs={_media.Clock.LastErrorMs:F1}; PollMs={_media.LastPollMs:F1}; MetadataMs={_media.LastMetadataQueryMs:F1}; RecognizeMs={_media.LastRecognitionDelayMs:F1}; LyricsReadyMs={_lastLyricsReadyMs:F1}; LookupMs={_lyricsService.LastLookupMs:F1}; CacheHit={_lyricsService.LastCacheHit}; LyricsProvider={_lyricResult.Source}; LyricsQuality={_lyricResult.Quality}; ProviderRequests={_lyricsService.LastProviderAttempts}; LyricsOffsetMs={_syncSettings.EffectiveMs(_songKey,_deviceKey)}; TextVisible={TitleRegion.Visibility==Visibility.Visible}; Palette={Vinyl.CurrentPalette.Accent}; FPSIntervalMs={_targetFrameMs:F2}; FrameMeanMs={stats.MeanMs:F2}; FrameP95Ms={stats.P95Ms:F2}; FrameP99Ms={stats.P99Ms:F2}; FrameMaxMs={stats.MaxMs:F2}; FrameSampleCount={_framePacing.Count}; EstimatedFrameMisses={_framePacing.EstimatedMisses}");
+                    $"SpotifyPlaying={_playing}; LoopbackAvailable={_audio.Available}; Peak={levels?.Max():F4}; AudioRms={_audio.LastRms:F5}; AudioGain={_audio.NormalizationGain:F1}; VinylRenderMs={Vinyl.LastRenderMs:F2}; GrooveCount={Vinyl.GrooveCount}; VinylQuality={Vinyl.Quality}; FullyOccluded={_fullyOccluded}; ClockValid={_media.Clock.Valid}; ClockSec={_media.Clock.Estimated()?.TotalSeconds:F2}; DurationSec={_media.Clock.Duration.TotalSeconds:F0}; LyricsCount={_lines.Count}; WordSyncedLines={_lines.Count(x=>x.Words is {Count:>0})}; LastWord={_karaoke.CurrentWordIndex}; ClockSampleAgeMs={_media.Clock.SampleAgeMs:F1}; ClockErrorMs={_media.Clock.LastErrorMs:F1}; PollMs={_media.LastPollMs:F1}; MetadataMs={_media.LastMetadataQueryMs:F1}; RecognizeMs={_media.LastRecognitionDelayMs:F1}; LyricsReadyMs={_lastLyricsReadyMs:F1}; LookupMs={_lyricsService.LastLookupMs:F1}; CacheHit={_lyricsService.LastCacheHit}; LyricsProvider={_lyricResult.Source}; LyricsQuality={_lyricResult.Quality}; ProviderRequests={_lyricsService.LastProviderAttempts}; LyricsOffsetMs={_syncSettings.EffectiveMs(_songKey,_deviceKey)}; TextVisible={TitleRegion.Visibility==Visibility.Visible}; ActualLyricsVisible={LyricsRendererVisible}; PlainChars={PlainLyricsText.Text.Length}; ActiveChars={ActiveLyric.Text.Length}; WordChildren={WordLyricPanel.Children.Count}; LyricsStage={_lyricsPipelineState}; RetryAttempts={_lyricsRecoveryAttempts}; NextRetry={_lyricsNextRetryAt?.ToString("HH:mm:ss")??"none"}; Palette={Vinyl.CurrentPalette.Accent}; FPSIntervalMs={_targetFrameMs:F2}; FrameMeanMs={stats.MeanMs:F2}; FrameP95Ms={stats.P95Ms:F2}; FrameP99Ms={stats.P99Ms:F2}; FrameMaxMs={stats.MaxMs:F2}; FrameSampleCount={_framePacing.Count}; EstimatedFrameMisses={_framePacing.EstimatedMisses}");
             } catch { }
         }
         // Render cadence is selected before Tick; no timer to reschedule.
+    }
+    private void CaptureV6LyricsPreview()
+    {
+        if(_v6CaptureTaken || TitleRegion.ActualWidth<200 ||
+            TitleRegion.ActualHeight<80)return;
+        _v6CaptureTaken=true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+            try {
+                int width=(int)Math.Ceiling(TitleRegion.ActualWidth);
+                int height=(int)Math.Ceiling(TitleRegion.ActualHeight);
+                var bmp=new System.Windows.Media.Imaging.RenderTargetBitmap(
+                    width,height,96,96,PixelFormats.Pbgra32);
+                // A Visual has parent-window coordinates. Draw through a
+                // VisualBrush into local (0,0) so the QA crop is not offset
+                // by the 360px vinyl column or falsely reported as clipped.
+                var visual=new DrawingVisual();
+                using(var dc=visual.RenderOpen()){
+                    var brush=new VisualBrush(TitleRegion);
+                    dc.DrawRectangle(brush,null,new Rect(0,0,width,height));
+                }
+                bmp.Render(visual);
+                var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();
+                encoder.Frames.Add(
+                    System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+                Directory.CreateDirectory(SettingsStore.DirectoryPath);
+                using var output=File.Create(Path.Combine(
+                    SettingsStore.DirectoryPath,"v6-live-lyrics-preview.png"));
+                encoder.Save(output);
+            }catch(Exception ex){SettingsStore.Log(ex);}
+        }));
     }
     private void Vinyl_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -986,6 +1091,16 @@ public partial class MainWindow : Window
         return menu;
     }
     internal AlbumPalette ActivePalette=>_chromatic.Tokens.Palette;
+    internal bool LyricsRendererVisible=>
+        TitleRegion.Visibility==Visibility.Visible &&
+        ((PlainLyricsReader.Visibility==Visibility.Visible &&
+            !string.IsNullOrWhiteSpace(PlainLyricsText.Text)) ||
+         (WordLyricPanel.Visibility==Visibility.Visible &&
+            WordLyricPanel.Children.Count>0) ||
+         (ActiveLyric.Visibility==Visibility.Visible &&
+            !string.IsNullOrWhiteSpace(ActiveLyric.Text)) ||
+         (NextLyric.Visibility==Visibility.Visible &&
+            !string.IsNullOrWhiteSpace(NextLyric.Text)));
     internal string LyricsStatus=>$"{_lyricResult.Source} · {_lyricResult.Quality} · {_lyricResult.Status}";
     internal string LyricsQualityDetails
     {
@@ -1003,11 +1118,20 @@ public partial class MainWindow : Window
                     "Eigenes lokales Material; keine öffentliche Versionsprüfung",
                 _=>"Aufnahmeversion nicht unabhängig bestätigt"
             };
-            return $"Format: {_lyricResult.Quality} | {timestamps}\n"+
+            string retry=_lyricsNextRetryAt is DateTimeOffset at?
+                at.ToLocalTime().ToString("HH:mm:ss"):"nicht geplant";
+            string song=_lastTrack is not null?
+                _lastTrack.Artist+" – "+_lastTrack.Title:"Noch kein Spotify-Titel";
+            return $"Track: {song} | Zustand: {_lyricsPipelineState}\n"+
+                $"Format: {_lyricResult.Quality} | {timestamps}\n"+
                 $"Quelle: {_lyricResult.Source} | {matching}\n"+
+                $"Zeilen: {_lines.Count} | Tatsächlicher Renderer: "+
+                (LyricsRendererVisible?"sichtbar":"ausgeblendet")+"\n"+
                 $"Aktueller Offset: {_syncSettings.EffectiveMs(_songKey,_deviceKey):+0;-0;0} ms | "+
                 $"Zwischenspeicher: {(_lyricsService.LastCacheHit?"ja":"nein")} | "+
-                $"Anfragen: {_lyricsService.LastProviderAttempts}";
+                $"Anfragen: {_lyricsService.LastProviderAttempts} | "+
+                $"Automatischer Neuversuch: {retry}\n"+
+                (_lyricsLastError.Length>0?"Letzter Hinweis: "+_lyricsLastError:"");
         }
     }
 

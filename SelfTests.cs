@@ -103,6 +103,33 @@ public static class SelfTests
             LyricsService.ActiveAt(lines,TimeSpan.FromSeconds(4))==2 && lines[2].Text=="");
         Check("Invalid LRC metadata is not displayed",() =>
             LyricsService.ParseLrc("[ar:Ignored]\n[not-a-time]not a cue").Count==0);
+        Check("V6: playback timeline arriving after metadata retries the right recording",()=>
+            MediaController.NeedsDurationRefresh(null,TimeSpan.FromSeconds(187)) &&
+            !MediaController.NeedsDurationRefresh(TimeSpan.FromSeconds(187),
+                TimeSpan.FromMilliseconds(187700)) &&
+            MediaController.NeedsDurationRefresh(TimeSpan.FromSeconds(187),
+                TimeSpan.FromSeconds(221)));
+        Check("V6: automatic retries back off without network flooding",()=>
+            LyricsRecoveryPolicy.Delay(1,"Rate-Limit")==TimeSpan.FromSeconds(65) &&
+            LyricsRecoveryPolicy.Delay(2,"ProviderError")==TimeSpan.FromSeconds(130) &&
+            LyricsRecoveryPolicy.Delay(7,"Kein ausreichend passender Liedtext gefunden")==
+                TimeSpan.FromMinutes(5));
+        Check("V6: before first real timestamp the next real line is visible",()=>{
+            var host=new MainWindow();
+            var lines=new []{
+                new LyricLine(TimeSpan.FromSeconds(7),"Upcoming genuine line"),
+                new LyricLine(TimeSpan.FromSeconds(12),"Next genuine line")
+            };
+            typeof(MainWindow).GetField("_lines",
+                System.Reflection.BindingFlags.Instance|
+                System.Reflection.BindingFlags.NonPublic)?.SetValue(host,lines);
+            typeof(MainWindow).GetMethod("ShowUpcomingSourceLine",
+                System.Reflection.BindingFlags.Instance|
+                System.Reflection.BindingFlags.NonPublic)?.Invoke(host,null);
+            return host.TitleRegion.Visibility==System.Windows.Visibility.Visible &&
+                host.NextLyric.Text=="Upcoming genuine line" &&
+                host.ActiveLyric.Text=="" && host.LyricsRendererVisible;
+        });
         Check("V5: same metadata with different duration is a new lyrics track",()=>{
             var first=new TrackState("One Song","Same Artist","Same Album",
                 true,null,TimeSpan.FromSeconds(188));
@@ -885,6 +912,23 @@ public static class SelfTests
                 "November","JM7","",TimeSpan.FromSeconds(190),
                 CancellationToken.None)).GetAwaiter().GetResult();
             return result.Quality=="Keine"&&!result.Synchronized;
+        });
+        Check("V6: LRCLIB anonymous request has no unregistered App-Id",()=>{
+            bool hasClient=false,hasInvalidAppId=false;
+            var stub=new StubLyricsHttp((req,ct)=>{
+                hasClient=req.Headers.Contains("Lrclib-Client");
+                hasInvalidAppId=req.Headers.Contains("Lrclib-App-Id");
+                return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json(
+                    "{\"trackName\":\"Valid Song\",\"artistName\":\"Test Singer\","+
+                    "\"albumName\":\"Test Album\",\"duration\":200,"+
+                    "\"syncedLyrics\":\"[00:01.00]Original sample line\"}"));
+            });
+            using var service=new LyricsService(stub);
+            var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
+                "Valid Song","Test Singer","Test Album",TimeSpan.FromSeconds(200),
+                CancellationToken.None)).GetAwaiter().GetResult();
+            return hasClient && !hasInvalidAppId &&
+                result.Quality=="Line" && result.Lines.Count==1 && stub.Calls==1;
         });
         Check("Lyrics multi-provider plain fallback does not fabricate sync",()=>{
             var stub=new StubLyricsHttp((req,ct)=>{

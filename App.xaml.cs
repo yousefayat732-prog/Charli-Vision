@@ -40,6 +40,11 @@ public partial class App : Application
             FramePacingSmokeTest.RunBlocking(this,profile);
             return;
         }
+        if(Array.Exists(e.Args,x=>x.Equals("--v6-overlay-qa",StringComparison.OrdinalIgnoreCase))){
+            bool okay=V6OverlayQa.Run();
+            if(!okay)Environment.ExitCode=1;
+            Shutdown();return;
+        }
         if(Array.Exists(e.Args,x=>x.Equals("--lyrics-coverage-test",StringComparison.OrdinalIgnoreCase))){
             bool okay=LyricsCoverageTests.Run();
             if(!okay)Environment.ExitCode=1;

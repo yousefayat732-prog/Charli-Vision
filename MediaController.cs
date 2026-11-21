@@ -34,6 +34,10 @@ public sealed class MediaController : IDisposable
     private string _trackKey="";
     private BitmapSource? _cover;
     private bool _lastPlaying,_hadSpotify;
+    private TimeSpan? _lastReportedDuration;
+    internal static bool NeedsDurationRefresh(TimeSpan? reported,TimeSpan? current)=>
+        current.HasValue && (!reported.HasValue ||
+            Math.Abs((current.Value-reported.Value).TotalSeconds)>2);
     private volatile bool _needsDiscovery=true,_needsMetadata=true;
     private long _lastDiscovery,_lastMetadata,_lastRequested;
     private long _retryAfter;
@@ -78,6 +82,7 @@ public sealed class MediaController : IDisposable
         if(ReferenceEquals(_session,session))return;
         Unsubscribe();
         _session=session;_needsMetadata=true;_trackKey="";
+        _lastReportedDuration=null;
         Clock.Reset();
         if(session is not null) {
             session.MediaPropertiesChanged+=MediaChanged;
@@ -150,18 +155,26 @@ public sealed class MediaController : IDisposable
                     LastRecognitionDelayMs=(Stopwatch.GetTimestamp()-began)*
                         1000d/Stopwatch.Frequency;
                 }
-                if(changed || playing!=_lastPlaying){
-                    _lastPlaying=playing;
-                    Changed?.Invoke(new TrackState(title,artist,album,playing,_cover,
-                        Clock.Valid?Clock.Duration:null));
+                TimeSpan? duration=Clock.Valid?Clock.Duration:null;
+                // Spotify may publish metadata before its playback timeline.
+                // Notify again as soon as the real length becomes available so
+                // lyrics can be matched to the right recording automatically.
+                if(changed || playing!=_lastPlaying ||
+                    NeedsDurationRefresh(_lastReportedDuration,duration)){
+                    _lastPlaying=playing;_lastReportedDuration=duration;
+                    Changed?.Invoke(new TrackState(title,artist,album,playing,_cover,duration));
                 }
-            }else if(playing!=_lastPlaying){
+            }else if(playing!=_lastPlaying ||
+                NeedsDurationRefresh(_lastReportedDuration,
+                    Clock.Valid?Clock.Duration:null)){
                 _lastPlaying=playing;
+                TimeSpan? duration=Clock.Valid?Clock.Duration:null;
+                _lastReportedDuration=duration;
                 // Keep metadata from the last successful read without blocking on an API call.
                 var parts=_trackKey.Split('\n');
                 Changed?.Invoke(new TrackState(parts.ElementAtOrDefault(0)??"CHARLI VISION",
                     parts.ElementAtOrDefault(1)??"SPOTIFY",parts.ElementAtOrDefault(2)??"",
-                    playing,_cover,Clock.Valid?Clock.Duration:null));
+                    playing,_cover,duration));
             }
         } catch(Exception ex) {
             SettingsStore.Log(ex);

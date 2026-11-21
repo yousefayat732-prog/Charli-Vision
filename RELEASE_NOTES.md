@@ -1,3 +1,20 @@
+# CHARLI VISION v1.5.0 — LYRICS FULL RESTORATION V6
+
+This update repairs the verified root cause of missing lyrics: an unregistered LRCLIB App-Id sent by v1.4.0 caused **HTTP 401**. Using the permitted anonymous `Lrclib-Client` header restored HTTP 200 for the same title. No API key or subscription is required.
+
+- Automatic lookup on startup and song changes; cancellable backoff retries for unavailable providers; legitimate cached Word, Line and Plain lyrics retained.
+- Spotify duration availability refreshes track detection to avoid missed album/duration matching.
+- First real source line is shown in subdued 'upcoming' style while awaiting a valid clock or before the first genuine cue. No inaccurate highlighting.
+- Lyrics state/visible renderer/failed provider/retry diagnostics in native settings. No additional render timers or UI-blocking network code.
+- Native WPF Word/Line/Plain renderer visually checked using actual online LRCLIB responses and a **synthetic QA clock**; real Spotify session separately produced visible Plain lyrics.
+- Live 14-song comparison: before Word 0, Line 0, Plain 8, None 6; after Word 4, Line 7, Plain 2, None 1. Availability is dynamic.
+- 125 automated self-tests, WPF GUI regression and Spotify-session smoke test passed on release candidate. The Windows installer and public release checks are documented separately.
+- No paid APIs, unapproved provider scraping, user data resets or Charli FPS changes. No Authenticode certificate available; the public update manifest is signed and installer SHA-256 verified.
+
+See [V6_LYRICS_RESTORATION_REPORT.md](V6_LYRICS_RESTORATION_REPORT.md).
+
+---
+
 # CHARLI VISION v1.4.0 — V5 VERIFIED CORE UPDATE
 
 This is a **tested partial implementation** of Project Ultimate Music Experience V5, not a claim of finished YouTube Music lyrics or 0 GPU stutter.

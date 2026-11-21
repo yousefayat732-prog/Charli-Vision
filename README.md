@@ -2,7 +2,17 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
-## Aktueller Release v1.4.0 — ULTIMATE MUSIC EXPERIENCE V5 (geprüfte Kernverbesserungen)
+## Aktueller Release v1.5.0 — LYRICS FULL RESTORATION V6
+
+- **Kritische Lyrics-Reparatur:** Der falsch konfigurierte LRCLIB-HTTP-Header verursachte HTTP 401 und damit leere Textbereiche. v1.5.0 verwendet wieder die offiziell zulässigen anonymen Client-Anfragen ohne registrierungspflichtige App-ID.
+- **Automatik wiederhergestellt:** Lyrics werden beim Spotify-Start und Songwechsel automatisch gesucht. Fehlversuche erhalten kontrollierte, abbrechbare Wiederholungen statt dauerhaft leerer Songtexte. Spät erkannte Laufzeiten lösen die passende neue Suche aus.
+- **Karaoke & Video-Stil:** Wort-, Zeilen- und Plain-Lyrics wurden mit echten LRCLIB-Antworten bis zum nativen WPF-Renderer getestet. Vorherige Zeile dezent, aktuelle Zeile groß, nächste Zeile darunter. Auch vor dem ersten Zeitstempel ist die nächste echte Textzeile bereits lesbar.
+- **Live-Nachweis:** Im laufenden Spotify-Overlay wurden Lyrics nach dem Fix automatisch geladen und tatsächlich sichtbar. Die 14 Online-Testfälle verbesserten sich von **0 Word / 0 Line / 8 Plain / 6 None** auf **4 Word / 7 Line / 2 Plain / 1 None**.
+- **Testgrenzen:** 125 Selbsttests und die native WPF-GUI-Regression bestanden. Der Word-/Line-Renderer-E2E-Test nutzt eine **kontrollierte Test-Uhr**, nicht deine persönliche Spotify-Wiedergabeposition. Nicht jeder Song hat Online-Lyrics; keine Zeitstempel werden erfunden.
+- **Kosten & Updates:** Keine neue kostenpflichtige API, kein unerlaubtes YouTube-Scraping. Installer läuft ohne separate .NET-Installation. RSA-PSS-signiertes GitHub-Update-Manifest; mangels Zertifikat keine Windows-Authenticode-Signatur.
+- Details, Fehlerursache und tatsächliche Testnachweise: [V6_LYRICS_RESTORATION_REPORT.md](V6_LYRICS_RESTORATION_REPORT.md).
+
+## Vorheriger Release v1.4.0 — ULTIMATE MUSIC EXPERIENCE V5 (geprüfte Kernverbesserungen)
 
 - **Lyrics:** Sicherere Aufnahme-/Dauer-Unterscheidung, verifizierte LRCLIB-Metadaten und weiterer lizenzfreier Plain-Text-Fallback. Verbesserter automatischer Lesemodus bei Pause und Seek – ohne erfundene Wort-Zeitstempel.
 - **Karaoke:** Sanfteres, rein auf die Buchstaben begrenztes Farb-Filling, weniger fleckiger Glow, leichte Wortskalierung und unverändert echte Wortzeitstempel.

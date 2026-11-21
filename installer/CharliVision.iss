@@ -1,6 +1,6 @@
 ; CHARLI VISION standalone Windows x64 installer
 ; Builds only the reviewed self-contained publish payload; never includes user data.
-#define AppVersion "1.4.0"
+#define AppVersion "1.5.0"
 #define AppName "Charli Vision"
 #define AppExe "CharliVision.exe"
 [Setup]

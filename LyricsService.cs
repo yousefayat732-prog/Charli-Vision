@@ -68,9 +68,12 @@ public sealed class LyricsService : IDisposable
         _library=library??new LyricsLibrary();
         _http=transport is null?new HttpClient():new HttpClient(transport);
         _http.Timeout=TimeSpan.FromSeconds(8);
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("CharliVision/1.4");
-        _http.DefaultRequestHeaders.TryAddWithoutValidation("Lrclib-App-Id",
-            "CharliVision/1.4 (private Windows desktop overlay)");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("CharliVision/1.5");
+        // Lrclib-App-Id may only be sent for a properly registered app.
+        // An invented value triggers HTTP 401 and silently makes all synced
+        // lyrics disappear. Anonymous requests work with Lrclib-Client.
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("Lrclib-Client",
+            "CharliVision/1.5 (free native Windows desktop overlay)");
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
     public static string SongKey(string title,string artist,string album,TimeSpan? duration)=>
