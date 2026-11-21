@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>CharliVision</AssemblyName>
+    <ApplicationIcon>CharliVision.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Installed Python runtime is optional and must never be compiled or bundled into WPF. -->
+    <Compile Remove="LocalAlignment\**\*.cs" />
+    <Page Remove="LocalAlignment\**\*" />
+    <None Remove="LocalAlignment\**\*" />
+    <EmbeddedResource Remove="LocalAlignment\**\*" />
+    <Resource Include="CharliVision.ico" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+</Project>

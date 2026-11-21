@@ -1,0 +1,223 @@
+<Window x:Class="CharliVision.SettingsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Charli Vision — Einstellungen" Width="980" Height="680"
+ Icon="/CharliVision.ico" MinWidth="800" MinHeight="565" WindowStartupLocation="CenterScreen"
+ WindowStyle="None" ResizeMode="CanResize" Background="#0D141D"
+ ShowInTaskbar="True" Focusable="True" UseLayoutRounding="True">
+ <Window.Resources>
+  <SolidColorBrush x:Key="AccentBrush" Color="#FF49C8CE"/>
+  <SolidColorBrush x:Key="AccentSoft" Color="#2849C8CE"/>
+  <SolidColorBrush x:Key="SurfaceBrush" Color="#E817202B"/>
+  <SolidColorBrush x:Key="BorderBrushCustom" Color="#566E889A"/>
+  <SolidColorBrush x:Key="TextMuted" Color="#FFAAB9CA"/>
+  <Style TargetType="TextBlock">
+   <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
+   <Setter Property="Foreground" Value="#FFF1F6FC"/>
+  </Style>
+  <Style x:Key="NavButton" TargetType="Button">
+   <Setter Property="Foreground" Value="#FFE3EAF2"/>
+   <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
+   <Setter Property="FontSize" Value="14"/>
+   <Setter Property="FontWeight" Value="SemiBold"/>
+   <Setter Property="Margin" Value="10,2"/>
+   <Setter Property="Padding" Value="16,11"/>
+   <Setter Property="HorizontalContentAlignment" Value="Left"/>
+   <Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Background" Value="Transparent"/>
+   <Setter Property="BorderThickness" Value="0"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Button">
+      <Border x:Name="Base" CornerRadius="11" Background="{TemplateBinding Background}"
+          Padding="{TemplateBinding Padding}">
+       <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter TargetName="Base" Property="Background" Value="{DynamicResource AccentSoft}"/>
+       </Trigger>
+       <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter TargetName="Base" Property="BorderThickness" Value="1"/>
+        <Setter TargetName="Base" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+  <Style x:Key="ActionButton" TargetType="Button">
+   <Setter Property="Background" Value="#FF243645"/>
+   <Setter Property="Foreground" Value="#FFEEF6FB"/>
+   <Setter Property="BorderBrush" Value="#587A92A6"/>
+   <Setter Property="BorderThickness" Value="1"/>
+   <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
+   <Setter Property="FontWeight" Value="SemiBold"/>
+   <Setter Property="FontSize" Value="13"/>
+   <Setter Property="Padding" Value="15,9"/>
+   <Setter Property="Margin" Value="0,3,9,3"/>
+   <Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Button">
+      <Border x:Name="Shape" Background="{TemplateBinding Background}"
+       BorderBrush="{TemplateBinding BorderBrush}"
+       BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9"
+       Padding="{TemplateBinding Padding}">
+       <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter TargetName="Shape" Property="Background" Value="{DynamicResource AccentSoft}"/>
+        <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+       </Trigger>
+       <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter TargetName="Shape" Property="BorderThickness" Value="2"/>
+        <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+       </Trigger>
+       <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Opacity" Value=".45"/>
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+  <Style x:Key="AppToggle" TargetType="CheckBox">
+   <Setter Property="Foreground" Value="#FFEEF5FA"/>
+   <Setter Property="FontSize" Value="14"/>
+   <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
+   <Setter Property="Margin" Value="0,7,0,7"/>
+   <Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="CheckBox">
+      <DockPanel LastChildFill="True">
+       <Border Width="45" Height="24" CornerRadius="12" DockPanel.Dock="Right"
+        Background="#FF344351" x:Name="Track" Margin="15,0,0,0">
+        <Ellipse Width="17" Height="17" Fill="#FFF1F6FB" Margin="3"
+         HorizontalAlignment="Left" x:Name="Thumb"/>
+       </Border>
+       <ContentPresenter VerticalAlignment="Center"/>
+      </DockPanel>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsChecked" Value="True">
+        <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}"/>
+        <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+       </Trigger>
+       <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter TargetName="Track" Property="BorderThickness" Value="2"/>
+        <Setter TargetName="Track" Property="BorderBrush" Value="#FFFFFFFF"/>
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+  <Style TargetType="ScrollBar">
+   <Setter Property="Width" Value="10"/>
+   <Setter Property="Background" Value="#14212B"/>
+   <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+  </Style>
+ </Window.Resources>
+ <Border BorderThickness="1" BorderBrush="{DynamicResource BorderBrushCustom}"
+         CornerRadius="17" Background="#FA101923" Margin="7">
+  <Border.Effect>
+   <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="5" Opacity=".47"/>
+  </Border.Effect>
+  <Grid ClipToBounds="True">
+   <Grid.RowDefinitions>
+    <RowDefinition Height="74"/>
+    <RowDefinition Height="*"/>
+    <RowDefinition Height="46"/>
+   </Grid.RowDefinitions>
+   <Border Grid.Row="0" Background="#D91A2833" BorderBrush="{DynamicResource BorderBrushCustom}"
+           BorderThickness="0,0,0,1" MouseLeftButtonDown="HeaderDown">
+    <Grid Margin="25,0,18,0">
+     <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="48"/>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
+     </Grid.ColumnDefinitions>
+     <Image Width="40" Height="40" Source="/CharliVision.ico"
+       Stretch="Uniform" HorizontalAlignment="Left"
+       VerticalAlignment="Center"/>
+     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+      <TextBlock Text="CHARLI VISION" FontWeight="Black" FontSize="19"/>
+      <TextBlock Text="CHROMATIC CONTROL  /  SETTINGS" Foreground="{DynamicResource TextMuted}"
+       FontSize="10" FontWeight="SemiBold" Margin="0,3,0,0"/>
+     </StackPanel>
+     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+      <TextBlock Text="●  LIVE ALBUM COLORS" FontSize="10" FontWeight="SemiBold"
+       Foreground="{DynamicResource AccentBrush}" Margin="0,0,20,0"
+       VerticalAlignment="Center"/>
+      <Button Content="—" Style="{StaticResource ActionButton}" Click="MinimizeClick"
+        Width="40" Padding="9,6" ToolTip="Minimieren"/>
+      <Button Content="×" Style="{StaticResource ActionButton}" Click="CloseClick"
+        Width="40" Padding="9,6" FontSize="19" ToolTip="Schließen"/>
+     </StackPanel>
+    </Grid>
+   </Border>
+   <Grid Grid.Row="1">
+    <Grid.ColumnDefinitions>
+     <ColumnDefinition Width="255"/>
+     <ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <Border Grid.Column="0" Background="#C715202B"
+      BorderBrush="#3555687B" BorderThickness="0,0,1,0">
+     <DockPanel>
+      <StackPanel DockPanel.Dock="Bottom" Margin="19,12,19,21">
+       <Border Background="#202F3B" BorderBrush="{DynamicResource BorderBrushCustom}"
+          BorderThickness="1" CornerRadius="11" Padding="12">
+        <StackPanel>
+         <TextBlock Text="DESKTOP MODE" Foreground="{DynamicResource AccentBrush}"
+          FontSize="11" FontWeight="Bold"/>
+         <TextBlock Text="Vinyl · FFT · Lyrics" Foreground="{DynamicResource TextMuted}"
+          FontSize="11" Margin="0,4,0,0"/>
+        </StackPanel>
+       </Border>
+      </StackPanel>
+      <StackPanel Margin="8,22,8,6">
+       <TextBlock Text="KATEGORIEN" Foreground="{DynamicResource TextMuted}"
+        FontSize="10" FontWeight="Bold" Margin="19,0,0,14"/>
+       <Button x:Name="NavPlayback" Content="♫   Wiedergabe" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Playback"/>
+       <Button x:Name="NavLyrics" Content="≋   Lyrics &amp; Sync" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Lyrics"/>
+       <Button x:Name="NavLayout" Content="▦   Layout" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Layout"/>
+       <Button x:Name="NavDesign" Content="✦   Animation &amp; Design" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Design"/>
+       <Button x:Name="NavKeys" Content="⌨   Tastenkombinationen" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Keys"/>
+       <Button x:Name="NavApp" Content="⚙   Anwendung" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="App"/>
+      </StackPanel>
+     </DockPanel>
+    </Border>
+    <Grid Grid.Column="1" Margin="27,20,25,14">
+     <Grid.RowDefinitions><RowDefinition Height="68"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+     <StackPanel>
+      <TextBlock x:Name="SectionTitle" FontSize="23" FontWeight="Bold" Text="Wiedergabe"/>
+      <TextBlock x:Name="SectionDescription" FontSize="12" Foreground="{DynamicResource TextMuted}"
+       Margin="0,5,0,0" Text="Musiksteuerelemente und Aktionen"/>
+     </StackPanel>
+     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+       HorizontalScrollBarVisibility="Disabled" CanContentScroll="True">
+      <StackPanel x:Name="SettingsContent" Margin="0,3,9,12"/>
+     </ScrollViewer>
+    </Grid>
+   </Grid>
+   <Border Grid.Row="2" Background="#D91A2833" BorderThickness="0,1,0,0"
+    BorderBrush="#3555687B" CornerRadius="0,0,15,15">
+    <Grid Margin="21,0,21,0">
+     <TextBlock x:Name="StatusText" Text="Bereit" FontSize="11"
+       Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center"/>
+     <TextBlock Text="NATIVE WPF  ·  LOCAL SETTINGS  ·  NO CLOUD KEY"
+       HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="10"
+       Foreground="{DynamicResource TextMuted}"/>
+    </Grid>
+   </Border>
+  </Grid>
+ </Border>
+</Window>

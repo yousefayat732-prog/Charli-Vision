@@ -1,0 +1,23 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore CharliVision.csproj
+      - name: Build
+        run: dotnet build CharliVision.csproj --no-restore -c Release
+      - name: Publish
+        run: dotnet publish CharliVision.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CharliVision-unsigned-windows-x64
+          path: dist/win-x64/CharliVision.exe

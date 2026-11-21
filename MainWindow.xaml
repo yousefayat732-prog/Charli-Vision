@@ -1,0 +1,67 @@
+<Window x:Class="CharliVision.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:CharliVision"
+ Title="Charli Vision" Icon="/CharliVision.ico" Width="980" Height="380"
+ WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
+ Background="Transparent" ShowInTaskbar="False" Focusable="False">
+ <Viewbox Stretch="Uniform">
+  <Grid Width="980" Height="380" Background="Transparent">
+   <Grid.ColumnDefinitions>
+    <ColumnDefinition Width="360"/>
+    <ColumnDefinition Width="*"/>
+   </Grid.ColumnDefinitions>
+   <local:VinylVisual x:Name="Vinyl" Width="350" Height="350"
+     HorizontalAlignment="Center" VerticalAlignment="Center"
+     MouseLeftButtonUp="Vinyl_MouseLeftButtonUp"
+     MouseWheel="Vinyl_MouseWheel"
+     MouseRightButtonUp="Vinyl_MouseRightButtonUp"/>
+   <Grid x:Name="TitleRegion" Visibility="Collapsed" Grid.Column="1" Margin="12,14,32,14"
+      VerticalAlignment="Center" Background="Transparent"
+      TextOptions.TextFormattingMode="Ideal"
+      TextOptions.TextRenderingMode="Grayscale"
+      MouseRightButtonUp="Vinyl_MouseRightButtonUp"
+      MouseLeftButtonDown="TitleRegion_MouseLeftButtonDown">
+    <StackPanel VerticalAlignment="Center">
+     <TextBlock x:Name="PreviousLyric" Text="" Opacity="0.62"
+       Foreground="#FFC4C9D0"
+       FontFamily="Segoe UI Variable Display,Segoe UI"
+       FontSize="23" FontWeight="Medium"
+       TextWrapping="Wrap" MinHeight="54" MaxHeight="78"
+       Margin="12,0,0,14">
+      <TextBlock.Effect>
+       <DropShadowEffect Color="#FF05060A" BlurRadius="8" ShadowDepth="1" Opacity="0.88"/>
+      </TextBlock.Effect>
+     </TextBlock>
+     <Grid MinHeight="120">
+      <Grid.Effect>
+       <DropShadowEffect Color="#FF030308" BlurRadius="7" ShadowDepth="2" Opacity="0.88"/>
+      </Grid.Effect>
+     <TextBlock x:Name="ActiveLyric" Text=""
+       Foreground="#FFFFF5EC" FontFamily="Segoe UI Variable Display,Segoe UI"
+       FontSize="45" FontWeight="ExtraBold"
+       TextWrapping="Wrap" TextTrimming="None" MaxHeight="204"
+       RenderTransformOrigin="0.5,0.5">
+      <TextBlock.Effect>
+       <DropShadowEffect x:Name="LyricsGlow" Color="#FFF46C26"
+         BlurRadius="15" ShadowDepth="0" Opacity="0.49"/>
+      </TextBlock.Effect>
+     </TextBlock>
+     <WrapPanel x:Name="WordLyricPanel" Visibility="Collapsed"
+         HorizontalAlignment="Left" VerticalAlignment="Center"
+         MaxWidth="580" Margin="0,2,0,2"/>
+     </Grid>
+     <TextBlock x:Name="NextLyric" Text="" Opacity="0.64"
+       Foreground="#FFC4C9D0"
+       FontFamily="Segoe UI Variable Display,Segoe UI"
+       FontSize="23" FontWeight="Medium"
+       TextWrapping="Wrap" MinHeight="54" MaxHeight="88" Margin="12,16,0,0">
+      <TextBlock.Effect>
+       <DropShadowEffect Color="#FF05060A" BlurRadius="8" ShadowDepth="1" Opacity="0.88"/>
+      </TextBlock.Effect>
+     </TextBlock>
+    </StackPanel>
+   </Grid>
+  </Grid>
+ </Viewbox>
+</Window>
