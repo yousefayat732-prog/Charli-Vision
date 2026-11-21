@@ -1,3 +1,19 @@
+# CHARLI VISION v1.3.0 — TRUE LIQUID GLASS REPAIR V4
+
+Windows 10/11 x64. Repair release for the existing application.
+
+- Removed the extra opaque WPF window rectangle and moved all glass capture, tint and light inside one rounded, true-alpha layered shell; verified top corner alpha 0 / 0.
+- Corrected the custom ScrollBar's missing vertical Track, Maximum, ViewportSize and two-way Value configuration.
+- Fixed the delayed ScrollChanged feedback cancelling the smooth wheel animation after ~1px; re-targetable short-lived WPF frame callback without extra background timer.
+- Responsive hotkey settings and monitor work-area clamping; all six categories, 24 keybind buttons, compact menu, all five render profiles preserved.
+- Real mouse-wheel, scrollbar PageDown/Up, physical thumb drag (353px in actual GUI), short-height compact menu tests and album-tinted design screenshots reviewed.
+- 110 self-tests passed, 11 real WPF GUI checks passed, Spotify smoke test passed, 0 build errors/warnings. The separate v1.3.0 Windows installer was installed and uninstalled successfully with the 110+11 tests passing on its installed EXE and the saved settings file unchanged.
+- Touchpad hardware and zero-stutter GPU-present behavior remain unverified; no native Acrylic claim. One-time blurred desktop capture is used for WPF material fallback.
+- Windows installer remains **unsigned by Authenticode** because no eligible certificate is installed; update metadata is independently signed and installer bytes are SHA-256-verified.
+- Detailed report: V4_REPAIR_REPORT.md.
+
+---
+
 # CHARLI VISION v1.2.0 — Infinity Perfection V3: verified completion release
 
 Windows 10/11 x64 — free standalone installer.

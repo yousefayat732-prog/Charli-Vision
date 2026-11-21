@@ -2,7 +2,18 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
-## Aktueller Release v1.2.0 — Premium Glass / V3
+## Aktueller Release v1.3.0 — TRUE LIQUID GLASS REPAIR V4
+
+- **Reparatur:** Keine zweite dunkle rechteckige Hintergrundebene mehr. Ein echter WPF-Transparenzkanal mit Alpha 0 in den geprüften Fensterecken, ein einzelner abgerundeter Glass-Host und nur darin platzierte Blur-, Farb- und Lichtschichten.
+- **Scrollen:** Fehler im vertikalen ScrollBar-Track und in der selbstabbrechenden Smooth-Scroll-Animation behoben. Mausrad, Seitenbefehle, schnelle Richtungswechsel und echtes Ziehen des WPF-Scrollbar-Griffs auf Windows getestet.
+- **Kompakt und responsiv:** Alle 24 Keybind-Aktionen auch bei 760px Fensterbreite erreichbar. Sechs Kategorien, kompakter Scrollviewer bei 490px Fensterhöhe, abrufbare fünf Animationsprofile.
+- **Qualität:** 110 Selbsttests und 11 echte WPF-GUI-Prüfgruppen bestanden, Spotify-Sitzungstest bestanden. 0 Compilerwarnungen und 0 Fehler. Keine neue UI-Abhängigkeit.
+- **Transparenzhinweis:** Die Desktop-Unschärfe wird einmal beim Fensteröffnen erfasst, kein kontinuierliches natives Acrylic. Hardware-Touchpad, geschützte Spiele und vollständige GPU-Present-FPS nicht unabhängig geprüft.
+- Die offiziellen Windows-Updates verwenden weiterhin signierte RSA-PSS-Manifeste; der Windows-Installer selbst besitzt mangels Zertifikat **keine Authenticode-Signatur**.
+
+Die ausführliche Ursachenanalyse mit Messungen und Grenzen: [V4_REPAIR_REPORT.md](V4_REPAIR_REPORT.md).
+
+## Vorheriger Release v1.2.0 — Premium Glass / V3
 
 - Das **geprüfte v1.2.0 Windows-x64-Setup** ist unter [GitHub Releases](https://github.com/yousefayat732-prog/Charli-Vision/releases) verfügbar. Es benötigt keine separat installierte .NET-Laufzeit.
 - Vergrößertes Premium-Liquid-Glass-Design mit getönten Cards, Reflexen, 8 Neon-Vektorsymbolen, native Windows-11-DWM-Präferenz (wo unterstützt), schlankem Scrollbar und Slider.
@@ -35,7 +46,7 @@ Diese Version bildet die **erste getestete Phase von Project Infinity Perfection
 
 ## Installation
 
-Unter Releases die Datei CharliVision-1.2.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
+Unter Releases die Datei CharliVision-1.3.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
 
 Der Installer ist noch NICHT mit Windows Authenticode signiert; SmartScreen kann warnen. Prüfsummen stehen im Release bereit.
 

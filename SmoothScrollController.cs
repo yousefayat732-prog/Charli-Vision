@@ -9,23 +9,25 @@ using System.Windows.Media;
 namespace CharliVision;
 
 /// <summary>
-/// Short-lived inertial scrolling shared by the two settings surfaces.
-/// No perpetual timers and no costly re-layout beyond standard ScrollViewer work.
+/// V4: interruptible pixel-based wheel scrolling; native scrollbar, touchpad,
+/// keyboard and touch manipulation retain their own WPF input paths.
+/// One short-lived compositor subscription, never a repeated layout timer.
 /// </summary>
 public sealed class SmoothScrollController : IDisposable
 {
     private readonly ScrollViewer _viewer;
     private readonly Func<bool> _reducedMotion;
     private readonly Stopwatch _clock=Stopwatch.StartNew();
-    private double _target;
-    private double _lastTime;
-    private bool _active,_disposed;
+    private double _target,_lastTime,_lastIssuedOffset;
+    private bool _active,_disposed,_internalScroll;
+
     public SmoothScrollController(ScrollViewer viewer,Func<bool> reducedMotion)
     {
         _viewer=viewer;
         _reducedMotion=reducedMotion;
         _target=viewer.VerticalOffset;
         _viewer.PreviewMouseWheel+=OnWheel;
+        _viewer.ScrollChanged+=OnScrollChanged;
         _viewer.Unloaded+=OnUnloaded;
     }
     private static bool InteractiveChild(DependencyObject? current,
@@ -38,19 +40,43 @@ public sealed class SmoothScrollController : IDisposable
         }
         return false;
     }
+    private void SetOffset(double pixels)
+    {
+        // WPF often raises ScrollChanged AFTER ScrollToVerticalOffset returns.
+        // Remember our intended offset across the deferred layout callback.
+        _lastIssuedOffset=Math.Clamp(pixels,
+            0,Math.Max(0,_viewer.ScrollableHeight));
+        _internalScroll=true;
+        try{_viewer.ScrollToVerticalOffset(_lastIssuedOffset);}
+        finally{_internalScroll=false;}
+    }
+    private void OnScrollChanged(object sender,ScrollChangedEventArgs e)
+    {
+        if(_disposed)return;
+        // Native scrollbar drag, PageUp/PageDown, touchpad manipulation and
+        // keyboard input must override an unfinished wheel animation.
+        if(!_internalScroll && Math.Abs(e.VerticalChange)>.001){
+            bool ourDeferredScroll=_active &&
+                Math.Abs(_viewer.VerticalOffset-_lastIssuedOffset)<1.5;
+            if(!ourDeferredScroll){
+                Stop();
+                _target=_viewer.VerticalOffset;
+            }
+        }
+        _target=Math.Clamp(_target,0,Math.Max(0,_viewer.ScrollableHeight));
+    }
     private void OnWheel(object sender,MouseWheelEventArgs e)
     {
-        if(_disposed || _viewer.ScrollableHeight<1 ||
+        if(_disposed||_viewer.ScrollableHeight<.5||e.Delta==0 ||
            InteractiveChild(e.OriginalSource as DependencyObject,_viewer))
             return;
-        // WPF wheel Delta=120 for a detent. Use pixel-based scrolling.
-        double desired=-e.Delta*.70;
-        _target=Math.Clamp((_active?_target:_viewer.VerticalOffset)+desired,
-            0,_viewer.ScrollableHeight);
+        double current=_active?_target:_viewer.VerticalOffset;
+        double requested=Math.Clamp(current-e.Delta*.72,0,_viewer.ScrollableHeight);
         e.Handled=true;
+        _target=requested;
         if(_reducedMotion()){
             Stop();
-            _viewer.ScrollToVerticalOffset(_target);
+            SetOffset(requested);
             return;
         }
         if(!_active){
@@ -61,19 +87,26 @@ public sealed class SmoothScrollController : IDisposable
     }
     private void OnRender(object? sender,EventArgs e)
     {
-        if(!_active || _disposed)return;
+        if(!_active||_disposed)return;
+        if(!_viewer.IsLoaded){Stop();return;}
         double now=_clock.Elapsed.TotalSeconds;
-        double dt=Math.Clamp(now-_lastTime,0,.10);
+        double dt=Math.Clamp(now-_lastTime,0,.080);
         _lastTime=now;
-        double delta=_target-_viewer.VerticalOffset;
-        if(Math.Abs(delta)<.32 || _viewer.ScrollableHeight<.1){
-            _viewer.ScrollToVerticalOffset(
-                Math.Clamp(_target,0,_viewer.ScrollableHeight));
-            Stop();return;
+        double target=Math.Clamp(_target,0,Math.Max(0,_viewer.ScrollableHeight));
+        double delta=target-_viewer.VerticalOffset;
+        if(Math.Abs(delta)<.35||_viewer.ScrollableHeight<.5){
+            SetOffset(target);Stop();return;
         }
-        double eased=1-Math.Exp(-dt/.072);
-        _viewer.ScrollToVerticalOffset(Math.Clamp(
-            _viewer.VerticalOffset+delta*eased,0,_viewer.ScrollableHeight));
+        // 95% within ~195ms; re-target immediately on new wheel input.
+        double eased=1-Math.Exp(-dt/.065);
+        SetOffset(_viewer.VerticalOffset+delta*eased);
+    }
+    public void ResetToTop()
+    {
+        if(_disposed)return;
+        Stop();
+        _target=0;
+        SetOffset(0);
     }
     private void OnUnloaded(object sender,RoutedEventArgs e)=>Stop();
     private void Stop()
@@ -88,6 +121,7 @@ public sealed class SmoothScrollController : IDisposable
         _disposed=true;
         Stop();
         _viewer.PreviewMouseWheel-=OnWheel;
+        _viewer.ScrollChanged-=OnScrollChanged;
         _viewer.Unloaded-=OnUnloaded;
     }
 }

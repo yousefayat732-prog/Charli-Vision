@@ -60,17 +60,18 @@
   <Border x:Name="OuterShell"
    CornerRadius="28" BorderThickness="1.4"
    BorderBrush="{DynamicResource GlassAccent}"
-   Background="#290A2023">
+   Background="Transparent">
    <Border.Effect>
     <DropShadowEffect BlurRadius="17" ShadowDepth="0"
        Color="#FF0CC9D3" Opacity=".24"/>
    </Border.Effect>
    <Grid x:Name="GlassContentGrid" ClipToBounds="True">
-    <Image x:Name="Backdrop" Opacity=".65" Stretch="Fill"
+    <Image x:Name="Backdrop" Opacity=".82" IsHitTestVisible="False" Stretch="Fill"
         SnapsToDevicePixels="True">
      <Image.Effect><BlurEffect Radius="14" RenderingBias="Performance"/></Image.Effect>
     </Image>
-    <Border x:Name="GlassTint" Background="#640A2225" CornerRadius="27"/>
+    <Border x:Name="GlassTint" Background="#640A2225" CornerRadius="27"
+      IsHitTestVisible="False"/>
     <Grid Margin="15,7,15,8">
      <Grid.RowDefinitions>
       <RowDefinition Height="58"/>

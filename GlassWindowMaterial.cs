@@ -18,7 +18,10 @@ internal static class GlassWindowMaterial
 
     internal static bool Apply(Window window,bool transient=false)
     {
-        if(!OperatingSystem.IsWindowsVersionAtLeast(10,0,22621))return false;
+        // DWM backdrop attributes do not apply reliably to layered WPF windows.
+        // Preserve their true-alpha rounded corners rather than forcing a second layer.
+        if(window.AllowsTransparency ||
+            !OperatingSystem.IsWindowsVersionAtLeast(10,0,22621))return false;
         try{
             IntPtr hwnd=new WindowInteropHelper(window).Handle;
             if(hwnd==IntPtr.Zero)return false;
@@ -45,16 +48,16 @@ internal static class GlassWindowMaterial
         return brush;
     }
     internal static Brush Header(ChromaticTokens t)=>
-        Gradient(Tone(t.Accent,244,.18),Tone(t.Palette.Secondary,240,.08));
+        Gradient(Tone(t.Accent,176,.18),Tone(t.Palette.Secondary,161,.08));
     internal static Brush Sidebar(ChromaticTokens t)=>
-        Gradient(Tone(t.Palette.Secondary,235,.15),
-            Color.FromArgb(231,16,30,40));
+        Gradient(Tone(t.Palette.Secondary,149,.15),
+            Color.FromArgb(131,16,30,40));
     internal static Brush Footer(ChromaticTokens t)=>
-        Gradient(Tone(t.Accent,235,.12),Color.FromArgb(228,18,33,42));
+        Gradient(Tone(t.Accent,165,.12),Color.FromArgb(142,18,33,42));
     internal static Brush Card(ChromaticTokens t)=>
-        Gradient(Tone(t.Accent,214,.12),Color.FromArgb(216,25,41,51));
+        Gradient(Tone(t.Accent,142,.12),Color.FromArgb(129,25,41,51));
     internal static Brush Button(ChromaticTokens t)=>
-        Gradient(Tone(t.Accent,165,.16),Color.FromArgb(172,46,67,82));
+        Gradient(Tone(t.Accent,131,.16),Color.FromArgb(123,46,67,82));
     internal static Brush IconTile(ChromaticTokens t)=>
         Gradient(Color.FromArgb(122,t.Palette.Highlight.R,
             t.Palette.Highlight.G,t.Palette.Highlight.B),

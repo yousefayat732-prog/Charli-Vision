@@ -69,6 +69,11 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        if(Array.Exists(e.Args,x=>x.Equals("--v4-window-qa",StringComparison.OrdinalIgnoreCase))){
+            bool passed=V4WindowQa.Run();
+            if(!passed)Environment.ExitCode=1;
+            Shutdown();return;
+        }
         if(Array.Exists(e.Args,x=>x.Equals("--hotkey-e2e",StringComparison.OrdinalIgnoreCase))){
             bool okay=GlobalHotkeySmokeTest.Run();
             if(!okay)Environment.ExitCode=1;

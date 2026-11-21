@@ -28,7 +28,7 @@ public partial class GlassMenuWindow : Window
     private readonly SmoothScrollController _scroll;
     private ChromaticTokens _lastTokens;
     private bool _hasTokens;
-    private byte _backdropTintAlpha=101;
+    private byte _backdropTintAlpha=89;
     private string _syncScope="Song";
     private bool _closing;
     private bool _building;
@@ -49,7 +49,8 @@ public partial class GlassMenuWindow : Window
             Math.Max(area.Left/scaleX+5,area.Right/scaleX-Width-5));
         Top=Math.Clamp(top,area.Top/scaleY+5,
             Math.Max(area.Top/scaleY+5,area.Bottom/scaleY-Height-5));
-        MaxHeight=Math.Min(786,Math.Max(420,area.Height/scaleY-12));
+        // Always fit the actual monitor work area, even at smaller resolutions.
+        MaxHeight=Math.Min(786,Math.Max(260,area.Height/scaleY-16));
         Height=MaxHeight;
         Flyout.CustomPopupPlacementCallback=PlaceFlyout;
         OuterShell.SizeChanged+=(_,e)=>UpdateCornerClip(e.NewSize);
@@ -143,7 +144,7 @@ public partial class GlassMenuWindow : Window
                 luminance+=.2126*px.R+.7152*px.G+.0722*px.B;
                 samples++;
             }
-            _backdropTintAlpha=(byte)(luminance/samples>145?159:101);
+            _backdropTintAlpha=(byte)(luminance/samples>145?138:86);
             UpdateColors(true);
             IntPtr handle=bmp.GetHbitmap();
             try{
@@ -413,7 +414,8 @@ public partial class GlassMenuWindow : Window
             });
             Sub("\uE8FD","Animationsprofil",_settings.RenderProfile+"  ›",p=>{
                 FlyoutHeader(p,"ANIMATION","Leistung und Bewegung");
-                foreach(var name in new[]{"Ultra Light","Balanced","Smooth"}){
+                foreach(var name in new[]{"Ultra Light","Balanced","Smooth",
+                    "High Refresh","Cinematic"}){
                     var chosen=name;
                     FlyoutAction(p,name,_settings.RenderProfile==chosen?"●":"",
                         ()=>{_settings.RenderProfile=chosen;ApplyAndSave();});

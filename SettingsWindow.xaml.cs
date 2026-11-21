@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
     private readonly HotkeyManager _hotkeys;
     private readonly DispatcherTimer _saveTimer=new(){Interval=TimeSpan.FromMilliseconds(330)};
     private readonly SmoothScrollController _scroll;
+    private readonly bool _suppressPersistenceForQa;
     private VisionAction? _recording;
     private CancellationTokenSource? _alignmentCancel;
     private LocalAlignmentService.Preview? _alignmentPreview;
@@ -37,24 +38,31 @@ public partial class SettingsWindow : Window
     private ChromaticTokens _lastTokens;
     private bool _hasTokens;
     private byte _glassTintAlpha=210;
-    public SettingsWindow(MainWindow host,AppSettings settings,HotkeyManager hotkeys)
+    public SettingsWindow(MainWindow host,AppSettings settings,HotkeyManager hotkeys,
+        bool suppressPersistenceForQa=false)
     {
         InitializeComponent();
         _host=host;_settings=settings;_hotkeys=hotkeys;
+        _suppressPersistenceForQa=suppressPersistenceForQa;
         _scroll=new SmoothScrollController(SettingsScroller,()=>_settings.ReducedMotion);
         SourceInitialized+=(_,_)=>{
-            GlassWindowMaterial.Apply(this);
+            // Layered WPF supplies REAL per-pixel alpha at rounded window corners.
+            // Native DWM backdrop attributes do not compose layered WPF windows.
+            FitScreenBounds();
             CaptureBackdrop();
         };
-        GlassBackdrop.SizeChanged+=(_,e)=>{
-            if(e.NewSize.Width>0&&e.NewSize.Height>0){
-                var clip=new RectangleGeometry(new Rect(0,0,
-                    e.NewSize.Width,e.NewSize.Height),16,16);
-                clip.Freeze();GlassBackdrop.Clip=clip;
-            }
+        SettingsGlassContent.SizeChanged+=(_,e)=>{
+            if(e.NewSize.Width<=0||e.NewSize.Height<=0)return;
+            var clip=new RectangleGeometry(new Rect(0,0,
+                e.NewSize.Width,e.NewSize.Height),22,22);
+            clip.Freeze();
+            SettingsGlassContent.Clip=clip;
         };
         _host.ChromaticPaletteChanged+=OnPaletteChanged;
-        _saveTimer.Tick+=(_,_)=>{_saveTimer.Stop();SettingsStore.Save(_settings);};
+        _saveTimer.Tick+=(_,_)=>{
+            _saveTimer.Stop();
+            if(!_suppressPersistenceForQa)SettingsStore.Save(_settings);
+        };
         Loaded+=(_,_)=>{
             ApplyPalette();Select("Playback");Keyboard.Focus(this);
         };
@@ -62,7 +70,8 @@ public partial class SettingsWindow : Window
             _alignmentCancel?.Cancel();
             _host.ChromaticPaletteChanged-=OnPaletteChanged;
             _scroll.Dispose();
-            _saveTimer.Stop();SettingsStore.Save(_settings);
+            _saveTimer.Stop();
+            if(!_suppressPersistenceForQa)SettingsStore.Save(_settings);
         };
         PreviewKeyDown+=KeyPreview;
     }
@@ -87,6 +96,20 @@ public partial class SettingsWindow : Window
     }
     [DllImport("gdi32.dll")]
     private static extern bool DeleteObject(IntPtr bitmap);
+    private void FitScreenBounds()
+    {
+        var hwnd=new WindowInteropHelper(this).Handle;
+        var area=WinForms.Screen.FromHandle(hwnd).WorkingArea;
+        var dpi=VisualTreeHelper.GetDpi(this);
+        MaxWidth=Math.Max(540,(area.Width-20)/Math.Max(.5,dpi.DpiScaleX));
+        MaxHeight=Math.Max(390,(area.Height-20)/Math.Max(.5,dpi.DpiScaleY));
+        MinWidth=Math.Min(750,MaxWidth);
+        MinHeight=Math.Min(470,MaxHeight);
+        Width=Math.Min(1120,MaxWidth);
+        Height=Math.Min(760,MaxHeight);
+        Left=area.Left/dpi.DpiScaleX+(area.Width/dpi.DpiScaleX-Width)/2;
+        Top=area.Top/dpi.DpiScaleY+(area.Height/dpi.DpiScaleY-Height)/2;
+    }
     private void CaptureBackdrop()
     {
         // One private in-memory frosted snapshot for the settings window.
@@ -107,7 +130,9 @@ public partial class SettingsWindow : Window
                 var pixel=bmp.GetPixel(w*x/4,h*y/4);
                 average+=.2126*pixel.R+.7152*pixel.G+.0722*pixel.B;
             }
-            _glassTintAlpha=(byte)(average/9>145?229:195);
+            // A single translucent tint remains inside the rounded clip.
+            // The desktop image stays visible without obscuring the controls.
+            _glassTintAlpha=(byte)(average/9>145?147:99);
             IntPtr handle=bmp.GetHbitmap();
             try{
                 var source=Imaging.CreateBitmapSourceFromHBitmap(
@@ -118,12 +143,14 @@ public partial class SettingsWindow : Window
             }finally{DeleteObject(handle);}
         }catch(Exception){
             GlassBackdrop.Source=null;
-            _glassTintAlpha=231;
+            _glassTintAlpha=166;
         }
     }
     private void SaveSoon()
     {
-        _saveTimer.Stop();_saveTimer.Start();
+        if(!_suppressPersistenceForQa){
+            _saveTimer.Stop();_saveTimer.Start();
+        }
         _host.ApplyControlSettings();
     }
     private void Status(string value,bool warning=false)
@@ -194,6 +221,8 @@ public partial class SettingsWindow : Window
                 nav.SetResourceReference(System.Windows.Controls.Button.ForegroundProperty,"TextPrimary");
             }
         }
+        // Switching pages must never inherit the previous page's scroll target.
+        _scroll.ResetToTop();
         SettingsContent.Children.Clear();
         switch(category){
             case "Playback":BuildPlayback();break;
@@ -204,9 +233,11 @@ public partial class SettingsWindow : Window
             case "App":BuildApp();break;
         }
         if(!_settings.ReducedMotion){
-            SettingsContent.Opacity=.35;
+            // Opacity only: do not animate Measure/Arrange on scroll-heavy pages.
+            SettingsContent.BeginAnimation(OpacityProperty,null);
+            SettingsContent.Opacity=.75;
             SettingsContent.BeginAnimation(OpacityProperty,
-                new DoubleAnimation(.35,1,TimeSpan.FromMilliseconds(160)){
+                new DoubleAnimation(.75,1,TimeSpan.FromMilliseconds(125)){
                     EasingFunction=new QuadraticEase {EasingMode=EasingMode.EaseOut}
                 });
         }else{
@@ -584,27 +615,31 @@ public partial class SettingsWindow : Window
             "Ändern → Kombination drücken → prüfen → speichern. Escape bricht ab.");
         foreach(var action in HotkeyManager.Actions){
             var selected=action;
-            var row=new Grid{Margin=new Thickness(0,4,0,6)};
-            row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
-            row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(165)});
-            row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(95)});
-            row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(85)});
-            var name=Text(HotkeyManager.Label(action),13);name.Margin=new Thickness(0,0,6,0);
-            row.Children.Add(name);
+            // Two responsive lines: no fixed 165+95+85 px columns that clip
+            // keybind editing buttons on a smaller monitor or high DPI.
+            var row=new StackPanel{Margin=new Thickness(0,4,0,9)};
+            var caption=new WrapPanel{Margin=new Thickness(0,0,0,3)};
+            var name=Text(HotkeyManager.Label(action),13);
+            name.Margin=new Thickness(0,0,13,0);
+            caption.Children.Add(name);
             var current=Text(HotkeyManager.DisplayBinding(_hotkeys.Binding(action)),12,true);
-            Grid.SetColumn(current,1);row.Children.Add(current);
+            caption.Children.Add(current);
+            row.Children.Add(caption);
             var change=Button("Ändern",()=>{
                 _recording=selected;
                 Status($"Drücke jetzt die neue Kombination für {HotkeyManager.Label(selected)}. Escape = Abbrechen.");
                 Keyboard.Focus(this);
             });
-            change.Margin=new Thickness(2);Grid.SetColumn(change,2);row.Children.Add(change);
             var remove=Button("Entfernen",()=>{
                 if(_hotkeys.Configure(selected,"",out var msg)){
                     Status(msg);Select("Keys");
                 }else Status(msg,true);
             });
-            remove.Margin=new Thickness(2);Grid.SetColumn(remove,3);row.Children.Add(remove);
+            var controls=new WrapPanel();
+            change.Margin=new Thickness(0,0,7,3);
+            remove.Margin=new Thickness(0,0,0,3);
+            controls.Children.Add(change);controls.Children.Add(remove);
+            row.Children.Add(controls);
             mapping.Children.Add(row);
         }
     }

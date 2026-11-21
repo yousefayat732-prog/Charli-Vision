@@ -3,7 +3,7 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  Title="Charli Vision — Einstellungen" Width="1120" Height="760"
  Icon="/CharliVision.ico" MinWidth="900" MinHeight="600" WindowStartupLocation="CenterScreen"
- WindowStyle="None" ResizeMode="CanResize" Background="#0D141D"
+ WindowStyle="None" ResizeMode="CanResize" AllowsTransparency="True" Background="Transparent"
  ShowInTaskbar="True" Focusable="True" UseLayoutRounding="True">
  <Window.Resources>
   <SolidColorBrush x:Key="AccentBrush" Color="#FF49C8CE"/>
@@ -188,8 +188,13 @@
    <Setter Property="Template">
     <Setter.Value>
      <ControlTemplate TargetType="ScrollBar">
-      <Grid Background="#100C1720">
-       <Track x:Name="PART_Track" IsDirectionReversed="True">
+      <Grid Background="Transparent">
+       <Track x:Name="PART_Track" Orientation="Vertical"
+         Minimum="{TemplateBinding Minimum}"
+         Maximum="{TemplateBinding Maximum}"
+         ViewportSize="{TemplateBinding ViewportSize}"
+         Value="{Binding Value,RelativeSource={RelativeSource TemplatedParent},Mode=TwoWay}"
+         IsDirectionReversed="True">
         <Track.DecreaseRepeatButton>
          <RepeatButton Command="ScrollBar.PageUpCommand"
            Opacity="0" Focusable="False"/>
@@ -261,21 +266,27 @@
    </Setter>
   </Style>
  </Window.Resources>
- <Grid>
-  <Image x:Name="GlassBackdrop" Margin="9" Opacity=".74"
-    Stretch="Fill" IsHitTestVisible="False" SnapsToDevicePixels="True">
-   <Image.Effect>
-    <BlurEffect Radius="17" RenderingBias="Performance"/>
-   </Image.Effect>
-  </Image>
-  <Border Margin="10" CornerRadius="22" ClipToBounds="True" IsHitTestVisible="False"
-    Background="{DynamicResource GlassAmbientLight}" Opacity=".75"/>
- <Border BorderThickness="1" BorderBrush="{DynamicResource BorderBrushCustom}"
-         CornerRadius="23" Background="{DynamicResource GlassSurfaceTint}" Margin="9">
-  <Border.Effect>
-   <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="5" Opacity=".47"/>
-  </Border.Effect>
-  <Grid ClipToBounds="True">
+ <Grid Background="Transparent">
+  <!-- V4: a single rounded material host. Nothing is drawn behind the shell. -->
+  <Border x:Name="SettingsGlassShell" BorderThickness="1"
+    BorderBrush="{DynamicResource BorderBrushCustom}"
+    CornerRadius="23" Background="Transparent" Margin="9">
+   <Border.Effect>
+    <DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="3" Opacity=".24"/>
+   </Border.Effect>
+   <Grid x:Name="SettingsGlassContent" ClipToBounds="True">
+    <!-- Capture, tint, and lighting are strictly INSIDE the clipped glass shape. -->
+    <Image x:Name="GlassBackdrop" Opacity=".72" Stretch="Fill"
+      IsHitTestVisible="False" SnapsToDevicePixels="True">
+     <Image.Effect>
+      <BlurEffect Radius="20" RenderingBias="Performance"/>
+     </Image.Effect>
+    </Image>
+    <Border Background="{DynamicResource GlassSurfaceTint}"
+      IsHitTestVisible="False"/>
+    <Border Background="{DynamicResource GlassAmbientLight}"
+      Opacity=".38" IsHitTestVisible="False"/>
+    <Grid>
    <Grid.RowDefinitions>
     <RowDefinition Height="82"/>
     <RowDefinition Height="*"/>
@@ -476,7 +487,8 @@
        Margin="0,5,0,0" Text="Musiksteuerelemente und Aktionen"/>
      </StackPanel>
      <ScrollViewer x:Name="SettingsScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto"
-       HorizontalScrollBarVisibility="Disabled" CanContentScroll="True">
+       HorizontalScrollBarVisibility="Disabled" CanContentScroll="False" PanningMode="VerticalOnly"
+       IsManipulationEnabled="True" KeyboardNavigation.TabNavigation="Continue">
       <StackPanel x:Name="SettingsContent" Margin="0,3,9,12"/>
      </ScrollViewer>
     </Grid>
@@ -491,7 +503,8 @@
        Foreground="{DynamicResource TextMuted}"/>
     </Grid>
    </Border>
-  </Grid>
- </Border>
+    </Grid>
+   </Grid>
+  </Border>
  </Grid>
 </Window>
