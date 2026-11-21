@@ -97,7 +97,8 @@ public partial class App : Application
                         overlay.OpenAdvancedSettings(
                             Array.Exists(e.Args,x=>x.EndsWith("-design",StringComparison.OrdinalIgnoreCase))?
                             "Design":Array.Exists(e.Args,x=>x.EndsWith("-keys",StringComparison.OrdinalIgnoreCase))?
-                            "Keys":"Playback");
+                            "Keys":Array.Exists(e.Args,x=>x.EndsWith("-lyrics",StringComparison.OrdinalIgnoreCase))?
+                            "Lyrics":"Playback");
                     else overlay.OpenSettings();
                     if(Array.Exists(e.Args,x=>x.StartsWith("--glass-capture",
                         StringComparison.OrdinalIgnoreCase)) ||

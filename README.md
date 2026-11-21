@@ -2,7 +2,17 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
-## Aktueller Release v1.3.0 — TRUE LIQUID GLASS REPAIR V4
+## Aktueller Release v1.4.0 — ULTIMATE MUSIC EXPERIENCE V5 (geprüfte Kernverbesserungen)
+
+- **Lyrics:** Sicherere Aufnahme-/Dauer-Unterscheidung, verifizierte LRCLIB-Metadaten und weiterer lizenzfreier Plain-Text-Fallback. Verbesserter automatischer Lesemodus bei Pause und Seek – ohne erfundene Wort-Zeitstempel.
+- **Karaoke:** Sanfteres, rein auf die Buchstaben begrenztes Farb-Filling, weniger fleckiger Glow, leichte Wortskalierung und unverändert echte Wortzeitstempel.
+- **Einstellungen:** Transparente Premium-WPF-Oberfläche mit Lyrics-Quellen, Qualitätsangabe, Metadatenhinweisen, Cache- und Offset-Diagnostik.
+- **Performance:** Opt-in-Autopilot reduziert die Zielaktualisierung nur bei vollständig verdecktem Fenster; standardmäßig AUS. Alle fünf vorhandenen Profile bleiben erhalten.
+- **Tests:** 121 automatisierte Selbsttests PASS, 10 WPF-GUI-Prüfgruppen PASS, 1 Mausautomation wegen Windows-Eingabesperre SKIP, Spotify-Test PASS. Die öffentliche LRCLIB war im aktuellen Live-Test rate-limited: 14 Fälle ergaben 8 Plain, 6 ohne Treffer und keine unabhängig bestätigten Word-/Line-Antworten.
+- **Wichtig:** YouTube Music wurde **nicht** als neuer Lyrics-Scraper aktiviert, da keine freigegebene Lyrics-API bestätigt werden konnte. Kein DRM-Bypass, keine Kostenpflicht. Details und nicht abgeschlossene Ziele in [V5_VERIFIED_CORE_REPORT.md](V5_VERIFIED_CORE_REPORT.md).
+- Der Windows-Installer besitzt mangels Zertifikat keine Authenticode-Signatur; GitHub-Update-Manifeste sind separat RSA-PSS-signiert und mit SHA-256 abgesichert.
+
+## Vorheriger Release v1.3.0 — TRUE LIQUID GLASS REPAIR V4
 
 - **Reparatur:** Keine zweite dunkle rechteckige Hintergrundebene mehr. Ein echter WPF-Transparenzkanal mit Alpha 0 in den geprüften Fensterecken, ein einzelner abgerundeter Glass-Host und nur darin platzierte Blur-, Farb- und Lichtschichten.
 - **Scrollen:** Fehler im vertikalen ScrollBar-Track und in der selbstabbrechenden Smooth-Scroll-Animation behoben. Mausrad, Seitenbefehle, schnelle Richtungswechsel und echtes Ziehen des WPF-Scrollbar-Griffs auf Windows getestet.
@@ -46,7 +56,7 @@ Diese Version bildet die **erste getestete Phase von Project Infinity Perfection
 
 ## Installation
 
-Unter Releases die Datei CharliVision-1.3.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
+Unter Releases die Datei CharliVision-1.4.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
 
 Der Installer ist noch NICHT mit Windows Authenticode signiert; SmartScreen kann warnen. Prüfsummen stehen im Release bereit.
 

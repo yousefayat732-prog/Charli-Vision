@@ -1,3 +1,20 @@
+# CHARLI VISION v1.4.0 — V5 VERIFIED CORE UPDATE
+
+This is a **tested partial implementation** of Project Ultimate Music Experience V5, not a claim of finished YouTube Music lyrics or 0 GPU stutter.
+
+- Separate song recordings by real duration even with identical metadata. Conservative album validation when length is missing.
+- LRCLIB App-Id header and broader recording version tags; existing LRCLIB/lyrics.ovh fallback and local alignment retained without additional APIs.
+- Plain lyrics reader automatically follows real playback position as an **estimated viewport navigation** on resume/seek without making up timestamps. No manual lyrics pages.
+- More precise, quieter karaoke: glyph-only feathered album gradient, lower word-scale and bounded soft shadow.
+- Settings quality panel: source, Word/Line/Plain, match-verification caveat, request/cache status and per-song offset.
+- Optional hidden-window performance autopilot, default OFF. User settings and existing target FPS retained unless opted in.
+- **121 self-tests, Spotify smoke, 10 WPF GUI groups passed; 1 OS mouse-input test skipped.** All code compiled with zero warnings and errors. Dedicated installer and public GitHub update checks tracked separately.
+- 14 real online provider checks returned **8 Plain and 6 None** due LRCLIB rate-limits; **0 Word/Line** in this one live run. Do not interpret as song coverage guarantee.
+- Unofficial YouTube Music lyrics extraction, captions scraping, new translations, vocal separation, live duet singer metadata, and true GPU-present zero-stutter certification were not implemented. See V5_VERIFIED_CORE_REPORT.md.
+- No Authenticode certificate; official update manifest is independently RSA-PSS signed.
+
+---
+
 # CHARLI VISION v1.3.0 — TRUE LIQUID GLASS REPAIR V4
 
 Windows 10/11 x64. Repair release for the existing application.

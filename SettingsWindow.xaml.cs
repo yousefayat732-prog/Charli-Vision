@@ -372,6 +372,10 @@ public partial class SettingsWindow : Window
             Button("Eigene LRC/TXT importieren",()=>_host.ImportLyrics()),
             Button("Lyrics-Editor öffnen",()=>_host.OpenLyricsEditor(this)));
         var status=Card("AKTUELLE QUELLE",_host.LyricsStatus);
+        status.Children.Add(Text(_host.LyricsQualityDetails,12,true));
+        status.Children.Add(Text(
+            "Quellen: LRCLIB (Word/Line/Plain), lyrics.ovh (Plain), eigene Dateien. "+
+            "YouTube Music ist ohne freigegebenen Lyrics-Zugang nicht aktiviert.",11,true));
         Actions(status,Button("Synchronisationsdiagnose kopieren",_host.CopySyncDiagnostics));
         var sync=Card("⏱  Synchronisationskorrektur",
             "+ zeigt den Text früher an; − zeigt ihn später an. Werte bleiben gespeichert.");
@@ -597,6 +601,10 @@ public partial class SettingsWindow : Window
             });
         Toggle(frequency,"Bewegungen reduzieren",_settings.ReducedMotion,
             v=>_settings.ReducedMotion=v);
+        Toggle(frequency,"Performance-Autopilot bei vollständiger Verdeckung (optional)",
+            _settings.PerformanceAutopilot,v=>_settings.PerformanceAutopilot=v,
+            "Standardmäßig AUS. Nur wenn aktiviert: verdecktes Overlay max. 20 Zeichenframes/s; "+
+            "Wiedergabezeit und Lyrics bleiben korrekt, nach Sichtbarkeit wieder Zielprofil.");
     }
     private void BuildKeys()
     {

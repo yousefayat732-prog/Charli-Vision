@@ -14,6 +14,10 @@ public sealed class AppSettings
     public bool AutoStart { get; set; }
     public bool AutomaticUpdateChecks { get; set; }=true;
     public bool ReducedMotion { get; set; }
+    // Opt-in only; an unset default doesn't rewrite existing settings files.
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PerformanceAutopilot { get; set; }=false;
     public string RenderProfile { get; set; }="Balanced";
     public string VinylQuality { get; set; }="Balanced";
     public bool CoverRotates { get; set; }=true;

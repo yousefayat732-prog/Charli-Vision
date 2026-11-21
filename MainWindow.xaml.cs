@@ -176,13 +176,18 @@ public partial class MainWindow : Window
         catch(Exception ex) {SettingsStore.Log(ex);}
         finally { _polling=false; }
     }
+    internal static string IdentityForLyrics(TrackState state)=>
+        state.Title+"\n"+state.Artist+"\n"+state.Album+"\n"+
+        Math.Round(state.Duration?.TotalSeconds??0);
     private void OnTrackChanged(TrackState state)
     {
         if (!Dispatcher.CheckAccess()) {
             Dispatcher.BeginInvoke(() => OnTrackChanged(state));
             return;
         }
-        string identity=state.Title+"\n"+state.Artist+"\n"+state.Album;
+        // Distinguish different recordings even when Spotify reports the
+        // same text metadata but a different track length.
+        string identity=IdentityForLyrics(state);
         bool changed=_displayKey!=identity;
         _displayKey=identity;
         if(changed){
@@ -479,11 +484,16 @@ public partial class MainWindow : Window
     {
         if(PlainLyricsReader.Visibility!=Visibility.Visible||!_playing)return;
         _plainReaderElapsed+=dt;
-        if(_plainReaderElapsed-_plainScrollPrevious<.06)return;
+        double elapsedSinceScroll=_plainReaderElapsed-_plainScrollPrevious;
+        if(elapsedSinceScroll<.06)return;
         _plainScrollPrevious=_plainReaderElapsed;
-        // Slow constant reading pace; never tied to guessed lyric timestamps.
-        double offset=Math.Min(PlainLyricsReader.ScrollableHeight,
-            _plainReaderElapsed*12);
+        // Estimated reading-navigation based on the one real Spotify clock.
+        // No word or line timestamps are manufactured from the estimate.
+        double max=PlainLyricsReader.ScrollableHeight;
+        double target=PlainLyricsNavigator.Target(max,_media.Clock.Estimated(),
+            _media.Clock.Duration,_plainReaderElapsed);
+        double offset=PlainLyricsNavigator.Smooth(
+            PlainLyricsReader.VerticalOffset,target,max,elapsedSinceScroll);
         if(Math.Abs(offset-PlainLyricsReader.VerticalOffset)>.3)
             PlainLyricsReader.ScrollToVerticalOffset(offset);
     }
@@ -668,8 +678,23 @@ public partial class MainWindow : Window
         _karaoke.ApplyTheme(palette);
         _karaoke.GlowStrength=_settings.LyricsGlow;
         if(ActiveLyric.Effect is DropShadowEffect glow){
-            glow.Color=palette.Accent;glow.Opacity=_settings.LyricsGlow;
+            glow.Color=palette.Accent;
+            glow.Opacity=KaraokeWords.VisualGlowOpacity(_settings.LyricsGlow);
         }
+    }
+    internal static double FrameBudgetForProfile(string profile,bool fullyOccluded,
+        bool userEnabledAutopilot)
+    {
+        double normal=profile switch{
+            "Ultra Light"=>1000d/30d,
+            "Balanced"=>1000d/60d,
+            "High Refresh"=>1000d/180d,
+            "Smooth" or "Cinematic"=>1000d/120d,
+            _=>1000d/120d
+        };
+        // Never silently override the user's high-refresh setting.
+        return userEnabledAutopilot && fullyOccluded?
+            Math.Max(normal,1000d/20d):normal;
     }
     private void StartFrameUpdates()
     {
@@ -699,18 +724,10 @@ public partial class MainWindow : Window
             _lastOcclusionProbe=now;
             _fullyOccluded=_desktop.IsFullyOccluded();
         }
-        // Maintain the selected compositor cadence even behind other windows
-        // and while Spotify is paused. Occlusion is diagnostic only, never
-        // a reason to reduce the vinyl animation target to ~10 FPS.
-        // WPF/Windows may still limit physically presented frames.
-        double desired=_settings.RenderProfile switch{
-            "Ultra Light"=>1000d/30d,
-            "High Refresh"=>1000d/180d,
-            "Balanced"=>1000d/60d,
-            "Smooth"=>1000d/120d,
-            "Cinematic"=>1000d/120d,
-            _=>1000d/120d
-        };
+        // Selected cadence remains unchanged unless the user explicitly
+        // enables V5's resource-saving occlusion autopilot. No FPS guarantees.
+        double desired=FrameBudgetForProfile(_settings.RenderProfile,
+            _fullyOccluded,_settings.PerformanceAutopilot);
         _targetFrameMs=desired;
         if(!_frameScheduler.ShouldUpdate(now,desired))return;
         _framePacing.AddFrame(Stopwatch.GetTimestamp(),desired);
@@ -970,6 +987,29 @@ public partial class MainWindow : Window
     }
     internal AlbumPalette ActivePalette=>_chromatic.Tokens.Palette;
     internal string LyricsStatus=>$"{_lyricResult.Source} · {_lyricResult.Quality} · {_lyricResult.Status}";
+    internal string LyricsQualityDetails
+    {
+        get {
+            string timestamps=_lyricResult.Quality switch{
+                "Word"=>"Echte Wortzeitstempel der ausgewählten Quelle",
+                "Line"=>"Echte Zeilenzeitstempel der ausgewählten Quelle",
+                "Plain"=>"Lesetext ohne echte Zeitstempel; Navigation nur geschätzt",
+                _=>"Keine ausreichend passenden Songtexte"
+            };
+            string matching=_lyricResult.Source switch{
+                string s when s.StartsWith("LRCLIB",StringComparison.Ordinal)=>
+                    "Titel, Künstler und Aufnahmeversion geprüft; Album/Dauer soweit verfügbar",
+                "Eigene Datei" or "Lokale Audioausrichtung"=>
+                    "Eigenes lokales Material; keine öffentliche Versionsprüfung",
+                _=>"Aufnahmeversion nicht unabhängig bestätigt"
+            };
+            return $"Format: {_lyricResult.Quality} | {timestamps}\n"+
+                $"Quelle: {_lyricResult.Source} | {matching}\n"+
+                $"Aktueller Offset: {_syncSettings.EffectiveMs(_songKey,_deviceKey):+0;-0;0} ms | "+
+                $"Zwischenspeicher: {(_lyricsService.LastCacheHit?"ja":"nein")} | "+
+                $"Anfragen: {_lyricsService.LastProviderAttempts}";
+        }
+    }
 
     internal void OpenSettings()
     {
@@ -1045,7 +1085,7 @@ public partial class MainWindow : Window
             SetChromaticTarget(_settings.AlbumColorsEnabled?_lastAlbumPalette:AlbumPalette.Neutral);
         }
         if(ActiveLyric.Effect is DropShadowEffect glow)
-            glow.Opacity=_settings.LyricsGlow;
+            glow.Opacity=KaraokeWords.VisualGlowOpacity(_settings.LyricsGlow);
         bool lyricVisualChanged=Math.Abs(_lastRenderedLyricsScale-_settings.LyricsScale)>.001 ||
             _lastRenderedReducedMotion!=_settings.ReducedMotion ||
             _lastRenderedWordAnimation!=_settings.WordAnimationEnabled;

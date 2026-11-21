@@ -15,7 +15,7 @@ public sealed class KaraokeWords
     private readonly WrapPanel _panel;
     private readonly List<WordItem> _items=new();
     // Restrained glyph-only light; the previous 15px blur formed color blobs.
-    private readonly DropShadowEffect _glow=new(){BlurRadius=5.25,Opacity=.25,ShadowDepth=0};
+    private readonly DropShadowEffect _glow=new(){BlurRadius=3.6,Opacity=.18,ShadowDepth=0};
     // Only the ACTIVE word uses this mutable gradient; the others share frozen brushes.
     private readonly GradientStop _sweepFilled=new(Colors.White,.1);
     private readonly GradientStop _sweepPending=new(Colors.Gray,.15);
@@ -30,9 +30,11 @@ public sealed class KaraokeWords
     private double _glowStrength=.54;
     public double SizeScale {get;set;}=1;
     public bool HighContrast {get;set;}
+    internal static double VisualGlowOpacity(double strength)=>
+        Math.Clamp(strength,0,1)*.28;
     public double GlowStrength {get=>_glowStrength;set{
         _glowStrength=Math.Clamp(value,0,1);
-        _glow.Opacity=Math.Min(.36,_glowStrength*.58);
+        _glow.Opacity=VisualGlowOpacity(_glowStrength);
     }}
     public int CurrentWordIndex=>_active>=0?_active:-1;
     public bool ReducedMotion {
@@ -162,13 +164,15 @@ public sealed class KaraokeWords
         if(!timed || Math.Abs(ratio-_lastProgress)>.012) {
             _lastProgress=ratio;
             double sweep=timed?Math.Clamp(.06+ratio*.91,0,1):.8;
-            _sweepFilled.Offset=Math.Clamp(sweep-.045,0,1);
-            _sweepPending.Offset=Math.Clamp(sweep+.045,0,1);
+            // A wider feather softens the fill edge *within glyphs*;
+            // never paint a rectangular background behind the word.
+            _sweepFilled.Offset=Math.Clamp(sweep-.09,0,1);
+            _sweepPending.Offset=Math.Clamp(sweep+.09,0,1);
         }
-        _glow.Opacity=Math.Min(.36,
-            _glowStrength*.58*(.75+.25*Math.Sin(Math.PI*ratio)));
+        _glow.Opacity=VisualGlowOpacity(_glowStrength)*
+            (.75+.25*Math.Sin(Math.PI*ratio));
         double scale=_reducedMotion?1: (timed?
-            1.03+.04*Math.Sin(Math.PI*Math.Pow(ratio,.75)):1.045);
+            1.012+.025*Math.Sin(Math.PI*Math.Pow(ratio,.75)):1.025);
         if(Math.Abs(scale-_lastScale)>.003) {
             _lastScale=scale;
             current.Scale.ScaleX=scale;

@@ -57,7 +57,7 @@ public sealed class LyricsService : IDisposable
     private static readonly Regex StripPunctuation=new(
         @"[^\p{L}\p{N}]",RegexOptions.Compiled|RegexOptions.CultureInvariant);
     private static readonly Regex Version=new(
-        @"\b(live|remix|acoustic|instrumental|radio[ -]?edit|extended|sped[ -]?up|slowed|nightcore|demo|karaoke)\b",
+        @"\b(live|remix|acoustic|instrumental|radio[ -]?edit|extended|sped[ -]?up|slowed|nightcore|demo|karaoke|remaster(?:ed)?|re[ -]?recorded|clean|explicit|mono|stereo|cover[ -]?version|edit[ -]?version)\b",
         RegexOptions.IgnoreCase|RegexOptions.Compiled|RegexOptions.CultureInvariant);
     private static readonly Regex Features=new(
         @"\s*[\[(]?(?:feat\.?|ft\.?|featuring)\s+[^\]\)]*[\])]?",
@@ -68,9 +68,9 @@ public sealed class LyricsService : IDisposable
         _library=library??new LyricsLibrary();
         _http=transport is null?new HttpClient():new HttpClient(transport);
         _http.Timeout=TimeSpan.FromSeconds(8);
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("CharliVision/1.2");
-        _http.DefaultRequestHeaders.TryAddWithoutValidation("Lrclib-Client",
-            "CharliVision/1.2 (private Windows desktop overlay)");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("CharliVision/1.4");
+        _http.DefaultRequestHeaders.TryAddWithoutValidation("Lrclib-App-Id",
+            "CharliVision/1.4 (private Windows desktop overlay)");
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
     public static string SongKey(string title,string artist,string album,TimeSpan? duration)=>
@@ -440,6 +440,13 @@ public sealed class LyricsService : IDisposable
         if(a.Length<2 || a!=b)return false;
         if(duration is {TotalSeconds:>1} && DoubleField(entry,"duration") is double d
             && Math.Abs(d-duration.Value.TotalSeconds)>4.5)return false;
+        // Without a trusted song length, a known different album may refer to
+        // a different recording despite the same title/performer. Fail closed.
+        string foundAlbum=StringField(entry,"albumName")??"";
+        if(duration is not {TotalSeconds:>1} &&
+            !string.IsNullOrWhiteSpace(album) &&
+            !string.IsNullOrWhiteSpace(foundAlbum) &&
+            Normalize(album)!=Normalize(foundAlbum))return false;
         return true;
     }
     private static int Score(JsonElement value,string album,TimeSpan? duration)

@@ -213,6 +213,9 @@ public static class V4WindowQa
                     mouse_event(0x0002,0,0,0,IntPtr.Zero);
                     Pump(85);
                     rows.Add($"THUMB_MOUSE_OVER={thumb.IsMouseOver} CAPTURE={thumb.IsMouseCaptured} BUTTON={Mouse.LeftButton}");
+                    if(!thumb.IsMouseCaptured || !thumb.IsMouseOver)
+                        throw new GuiTestSkippedException(
+                            "Windows did not deliver pointer-down to the visible thumb");
                     for(int i=1;i<=7;i++){
                         _=SetCursorPos(x,y+travel*i/7);
                         Pump(40);

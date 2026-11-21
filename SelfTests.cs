@@ -103,6 +103,102 @@ public static class SelfTests
             LyricsService.ActiveAt(lines,TimeSpan.FromSeconds(4))==2 && lines[2].Text=="");
         Check("Invalid LRC metadata is not displayed",() =>
             LyricsService.ParseLrc("[ar:Ignored]\n[not-a-time]not a cue").Count==0);
+        Check("V5: same metadata with different duration is a new lyrics track",()=>{
+            var first=new TrackState("One Song","Same Artist","Same Album",
+                true,null,TimeSpan.FromSeconds(188));
+            var alternative=first with{Duration=TimeSpan.FromSeconds(232)};
+            return MainWindow.IdentityForLyrics(first)!=
+                MainWindow.IdentityForLyrics(alternative);
+        });
+        Check("V5: missing playback duration cannot justify another album",()=>{
+            using var other=System.Text.Json.JsonDocument.Parse(
+                "{\"trackName\":\"One Song\",\"artistName\":\"Same Artist\","+
+                "\"albumName\":\"Live Album\",\"syncedLyrics\":\"[00:01]Hello\"}");
+            return !LyricsService.MetadataMatches(other.RootElement,
+                "One Song","Same Artist","Studio Album",null);
+        });
+        Check("V5: verified duration can match compilation recording",()=>{
+            using var compilation=System.Text.Json.JsonDocument.Parse(
+                "{\"trackName\":\"One Song\",\"artistName\":\"Same Artist\","+
+                "\"albumName\":\"Compilation\",\"duration\":200}");
+            return LyricsService.MetadataMatches(compilation.RootElement,
+                "One Song","Same Artist","Original Album",TimeSpan.FromSeconds(200));
+        });
+        Check("V5: plain reader estimates navigation without lyric timecodes",()=>{
+            double first=PlainLyricsNavigator.Target(600,
+                TimeSpan.FromSeconds(2),TimeSpan.FromSeconds(180),0);
+            double middle=PlainLyricsNavigator.Target(600,
+                TimeSpan.FromSeconds(95),TimeSpan.FromSeconds(180),0);
+            double end=PlainLyricsNavigator.Target(600,
+                TimeSpan.FromSeconds(180),TimeSpan.FromSeconds(180),0);
+            return first==0 && middle>220 && middle<400 && end==600;
+        });
+        Check("V5: plain reader seeks immediately and smooths small changes",()=>{
+            double fast=PlainLyricsNavigator.Smooth(10,520,600,.06);
+            double smooth=PlainLyricsNavigator.Smooth(100,145,600,.08);
+            double fallback=PlainLyricsNavigator.Target(600,
+                null,TimeSpan.Zero,10);
+            return fast==520 && smooth>100 && smooth<145 && fallback==120;
+        });
+        Check("V5: performance autopilot is strictly opt-in",()=>
+            !new AppSettings().PerformanceAutopilot);
+        Check("V5: disabled autopilot does not change legacy JSON layout",()=>{
+            var normal=System.Text.Json.JsonSerializer.Serialize(new AppSettings());
+            var opted=System.Text.Json.JsonSerializer.Serialize(
+                new AppSettings{PerformanceAutopilot=true});
+            return !normal.Contains("PerformanceAutopilot",
+                       StringComparison.Ordinal) &&
+                opted.Contains("\"PerformanceAutopilot\":true",
+                    StringComparison.Ordinal);
+        });
+        Check("V5: high refresh never throttles while occluded unless opted in",()=>
+            Math.Abs(MainWindow.FrameBudgetForProfile("High Refresh",true,false)-
+                1000d/180d)<.01 &&
+            Math.Abs(MainWindow.FrameBudgetForProfile("High Refresh",true,true)-50)<.01 &&
+            Math.Abs(MainWindow.FrameBudgetForProfile("High Refresh",false,true)-
+                1000d/180d)<.01);
+        Check("V5: compositor deadline recalibrates after autopilot profile change",()=>{
+            var pacing=new FramePacingScheduler();
+            return pacing.ShouldUpdate(1,1000d/180d) &&
+                pacing.ShouldUpdate(1.05,50) &&
+                pacing.ShouldUpdate(1.06,1000d/180d) &&
+                !pacing.ShouldUpdate(1.061,1000d/180d);
+        });
+        Check("V5: karaoke glow remains glyph-only and bounded",()=>{
+            var panel=new System.Windows.Controls.WrapPanel();
+            var renderer=new KaraokeWords(panel){GlowStrength=1};
+            var words=new[]{
+                new LyricWord(TimeSpan.FromSeconds(1),TimeSpan.FromSeconds(3),"Hello "),
+                new LyricWord(TimeSpan.FromSeconds(3),TimeSpan.FromSeconds(4),"friend")
+            };
+            if(!renderer.Setup(new LyricLine(TimeSpan.FromSeconds(1),
+                "Hello friend",words)))return false;
+            renderer.Update(TimeSpan.FromSeconds(2));
+            var word=(System.Windows.Controls.TextBlock)panel.Children[0];
+            var glow=word.Effect as System.Windows.Media.Effects.DropShadowEffect;
+            var gradient=word.Foreground as System.Windows.Media.LinearGradientBrush;
+            return word.Background is null && glow is not null &&
+                glow.Opacity<=.28 && glow.BlurRadius<4 &&
+                gradient is not null &&
+                gradient.GradientStops[2].Offset-
+                    gradient.GradientStops[1].Offset>=.17;
+        });
+        Check("V5: subtitle timing remains source-based, not visual animation",()=>{
+            var panel=new System.Windows.Controls.WrapPanel();
+            var renderer=new KaraokeWords(panel){GlowStrength=.9};
+            var cues=new[]{
+                new LyricWord(TimeSpan.FromMilliseconds(2000),
+                    TimeSpan.FromMilliseconds(3000),"One "),
+                new LyricWord(TimeSpan.FromMilliseconds(3000),
+                    TimeSpan.FromMilliseconds(4000),"two")
+            };
+            if(!renderer.Setup(new LyricLine(TimeSpan.FromSeconds(2),
+                "One two",cues)))return false;
+            renderer.Update(TimeSpan.FromMilliseconds(2950));
+            bool first=renderer.CurrentWordIndex==0;
+            renderer.Update(TimeSpan.FromMilliseconds(3050));
+            return first && renderer.CurrentWordIndex==1;
+        });
         Check("Offset calibration",()=>
             LyricsService.ParseLrc("[offset:250]\n[00:01.00]sample")[0].Time ==
             TimeSpan.FromMilliseconds(1250));
@@ -1289,7 +1385,8 @@ public static class SelfTests
                 object.ReferenceEquals(block.Foreground,gradient) &&
                 gradient.GradientStops[1].Offset>before &&
                 block.Effect is System.Windows.Media.Effects.DropShadowEffect &&
-                ((System.Windows.Media.ScaleTransform)block.RenderTransform).ScaleX>1.04 &&
+                // V5 intentionally limits active-word scale to a subtle ~1.04.
+                ((System.Windows.Media.ScaleTransform)block.RenderTransform).ScaleX>1.02 &&
                 block.FontSize>49;
         });
         Check("Infinity: lyrics backward seek clears old glow",()=>{
