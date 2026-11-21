@@ -37,7 +37,7 @@ public sealed class LyricsService : IDisposable
     private readonly Dictionary<string,IReadOnlyList<LyricAlternative>> _choices=new();
     private readonly HashSet<string> _alreadySearched=new();
     private readonly HashSet<string> _wordUpgradeSearched=new();
-    private DateTimeOffset _lrclibRetryAfter,_ovhRetryAfter;
+    private DateTimeOffset _lrclibRetryAfter,_ovhRetryAfter,_betterLyricsRetryAfter;
     private readonly LyricsLibrary _library;
     public LyricsLibrary Library=>_library;
     public double LastLookupMs{get;private set;}
@@ -278,6 +278,21 @@ public sealed class LyricsService : IDisposable
             }
         }
         if(best?.Synchronized==true)return best;
+        // Better Lyrics is a documented cache-first provider used in the
+        // YouTube Music ecosystem. No API key, scraping or credentials.
+        // A miss never blocks the existing plain-text fallbacks.
+        if(DateTimeOffset.UtcNow>=_betterLyricsRetryAfter){
+            try{
+                var cachedWords=await SearchBetterLyricsCacheAsync(
+                    title,artist,album,duration,token);
+                if(cachedWords?.Synchronized==true)return cachedWords;
+            }catch(OperationCanceledException) when(token.IsCancellationRequested){throw;}
+            catch(Exception ex){
+                if(ex is not HttpRequestException && ex is not ProviderCooldownException)
+                    SettingsStore.Log(ex);
+                _betterLyricsRetryAfter=DateTimeOffset.UtcNow.AddSeconds(30);
+            }
+        }
         if(best is null && similarPlain is not null)best=similarPlain;
         if(best?.Quality=="Plain")return best;
 
@@ -303,9 +318,88 @@ public sealed class LyricsService : IDisposable
             }
         }
         if(best is not null)return best;
+        // lyrics.ovh also exposes a track-suggestion index. Use it only to
+        // resolve a verified alternate spelling/artist credit after the direct
+        // lookup fails; suggestions alone are never treated as lyrics.
+        if(DateTimeOffset.UtcNow>=_ovhRetryAfter &&
+            VersionKey(title).Length==0){
+            try{
+                var suggested=await SearchSuggestedPlainAsync(title,artist,duration,token);
+                if(suggested is not null)return suggested;
+            }catch(OperationCanceledException) when(token.IsCancellationRequested){throw;}
+            catch(Exception ex){
+                if(ex is not ProviderCooldownException)
+                    _ovhRetryAfter=DateTimeOffset.UtcNow.AddSeconds(25);
+            }
+        }
         return LyricResult.Unavailable(lrclibError?
             "Lyrics-Anbieter derzeit nicht erreichbar / Rate-Limit":
             "Kein ausreichend passender Liedtext gefunden");
+    }
+    private async Task<LyricResult?> SearchBetterLyricsCacheAsync(
+        string title,string artist,string album,TimeSpan? duration,CancellationToken token)
+    {
+        // Cache-only anonymous access; API-key misses return HTTP 401.
+        // Do not use fuzzy lyric matches without the verified song duration.
+        if(duration is not {TotalSeconds:>10 and <3600} ||
+            VersionKey(title).Length>0)return null;
+        string url="https://api.betterlyrics.org/getLyrics?s="+
+            Uri.EscapeDataString(title)+"&a="+
+            Uri.EscapeDataString(PrimaryArtist(artist))+"&al="+
+            Uri.EscapeDataString(album??"")+"&d="+
+            Math.Round(duration.Value.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+        LastProviderAttempts++;
+        using var doc=await FetchJson(url,"Better Lyrics",token);
+        if(doc is null || doc.RootElement.ValueKind!=JsonValueKind.Object)return null;
+        if(DoubleField(doc.RootElement,"score") is double confidence &&
+            confidence<.88)return null;
+        string? ttml=StringField(doc.RootElement,"ttml");
+        var lines=BetterLyricsTtml.Parse(ttml,duration);
+        if(lines.Count==0)return null;
+        bool words=lines.Any(x=>x.Words is {Count:>0});
+        return new LyricResult(lines,
+            words?"Wortgenaue Lyrics aus verifiziertem Cache":
+                "Zeilensynchronisierte Lyrics aus verifiziertem Cache",
+            true,"Better Lyrics (YouTube-Music-Cache)",words?"Word":"Line");
+    }
+    private async Task<LyricResult?> SearchSuggestedPlainAsync(
+        string title,string artist,TimeSpan? duration,CancellationToken token)
+    {
+        LastProviderAttempts++;
+        using var doc=await FetchJson("https://api.lyrics.ovh/suggest/"+
+            Uri.EscapeDataString(title+" "+PrimaryArtist(artist)),"lyrics.ovh",token);
+        if(doc?.RootElement.ValueKind!=JsonValueKind.Object ||
+            !doc.RootElement.TryGetProperty("data",out var data) ||
+            data.ValueKind!=JsonValueKind.Array)return null;
+        int attempts=0;
+        foreach(var item in data.EnumerateArray()){
+            if(item.ValueKind!=JsonValueKind.Object)continue;
+            string foundTitle=StringField(item,"title")??"";
+            if(TitleKey(foundTitle)!=TitleKey(title) ||
+                VersionKey(foundTitle)!=VersionKey(title))continue;
+            if(!item.TryGetProperty("artist",out var foundArtist))continue;
+            string foundName=StringField(foundArtist,"name")??"";
+            if(Normalize(PrimaryArtist(foundName))!=
+                Normalize(PrimaryArtist(artist)))continue;
+            if(duration is {TotalSeconds:>1} &&
+                DoubleField(item,"duration") is double seconds &&
+                Math.Abs(seconds-duration.Value.TotalSeconds)>4.5)continue;
+            // Never repeat the direct request or accept unrelated variants.
+            if(string.Equals(foundTitle,title,StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(foundName,PrimaryArtist(artist),
+                    StringComparison.OrdinalIgnoreCase))continue;
+            if(++attempts>2)break;
+            LastProviderAttempts++;
+            using var lyrics=await FetchJson("https://api.lyrics.ovh/v1/"+
+                Uri.EscapeDataString(foundName)+"/"+
+                Uri.EscapeDataString(foundTitle),"lyrics.ovh",token);
+            string? text=lyrics is null?null:StringField(lyrics.RootElement,"lyrics");
+            if(!string.IsNullOrWhiteSpace(text)&&text.Length<=70_000)
+                return new LyricResult(Array.Empty<LyricLine>(),
+                    "Verifizierter alternativer Lesetext ohne Zeitmarken",false,
+                    "lyrics.ovh (alternative Schreibweise)","Plain",text.Trim());
+        }
+        return null;
     }
     private async Task<LyricResult?> SearchBroadLrclibAsync(string title,string artist,
         string album,TimeSpan? duration,string key,CancellationToken token,
@@ -350,6 +444,7 @@ public sealed class LyricsService : IDisposable
             var until=response.Headers.RetryAfter?.Date ??
                 DateTimeOffset.UtcNow+delta;
             if(provider=="LRCLIB")_lrclibRetryAfter=until;
+            else if(provider=="Better Lyrics")_betterLyricsRetryAfter=until;
             else _ovhRetryAfter=until;
             throw new ProviderCooldownException();
         }

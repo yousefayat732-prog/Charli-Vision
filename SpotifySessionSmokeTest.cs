@@ -59,8 +59,23 @@ public static class SpotifySessionSmokeTest
                 var clock=session.GetTimelineProperties();
                 rows.Add("CLOCK_POSITION_MS="+clock.Position.TotalMilliseconds.ToString("0"));
                 rows.Add("TRACK_TITLE="+(latest?.Title??""));
-                rows.Add("TRACK_DURATION_MS="+
-                    (clock.EndTime-clock.StartTime).TotalMilliseconds.ToString("0"));
+                var duration=clock.EndTime-clock.StartTime;
+                rows.Add("TRACK_DURATION_MS="+duration.TotalMilliseconds.ToString("0"));
+                // Diagnose the provider for the actual active recording; never log lyrics text.
+                if(latest is not null && !string.IsNullOrWhiteSpace(latest.Title) &&
+                    !string.IsNullOrWhiteSpace(latest.Artist)){
+                    try{
+                        using var lyrics=new LyricsService();
+                        using var deadline=new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(25));
+                        var result=await lyrics.GetAsync(latest.Title,latest.Artist,
+                            latest.AlbumTitle??"",duration>TimeSpan.Zero?duration:null,deadline.Token);
+                        rows.Add("LYRICS_SOURCE="+result.Source);
+                        rows.Add("LYRICS_QUALITY="+result.Quality);
+                        rows.Add("LYRICS_LINES="+result.Lines.Count);
+                        rows.Add("LYRICS_PLAIN_CHARS="+(result.PlainText?.Length??0));
+                        rows.Add("LYRICS_STATUS="+result.Status);
+                    }catch(Exception ex){rows.Add("LYRICS_ERROR="+ex.GetType().Name);}
+                }
                 return playing && latest is not null && clock.EndTime>clock.StartTime;
             }).GetAwaiter().GetResult();
         }catch(Exception ex){
