@@ -28,9 +28,11 @@
 - Romanization, translation, singer/duet attribution require legitimate translation/text or singer metadata; not fabricated.
 - No real-hardware touchpad, all protected games, all monitor/DPI combinations, full GPU-present latency telemetry, or zero-stutter guarantee.
 - Windows installer is **not Authenticode signed** because there is no valid signing certificate. Official GitHub update manifest is separately RSA-PSS signed and includes exact installer SHA-256 and size.
-- The existing updater supports normal GitHub release discovery/download, signed manifest verification and installation. A real user-visible new-version update must be verified against the new release after publication; don't infer it from unit tests alone.
+- **Real v1.3.0 → v1.4.0 update discovery PASSED** through the original v1.3 settings UI: the user-visible update button returned "Available: 1.4.0 — verified". The test left settings unchanged and restarted production. This verifies signed discovery, not a complete one-click installation flow for this version. Earlier v1.0→v1.1 and v1.1→v1.2 full UI-driven upgrades remain documented separately.
 
 ## Project safety
 - Existing source, installed app and settings backed up privately outside the public repository before V5 changes.
+- **Production v1.4.0 installation PASS:** The standard packaged Windows Setup updated the normal existing app location; actual installed EXE hash matched the release build. 121 deployed self-tests and the Spotify-session test passed, user preferences SHA-256 stayed unchanged, and the normal application was restarted and running. Current saved profile: Cinematic. The user's newer global-hotkey setting remains enabled.
+- Official GitHub v1.4.0 release contains all three public artifacts (Setup, signed JSON manifest, detached signature); private RSA key was not published.
 - The separate Charli FPS project was not changed.
 - No access tokens, private PEM keys, Spotify secrets or personal settings are committed or published.
