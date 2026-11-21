@@ -27,13 +27,17 @@ public sealed class KaraokeWords
     private SolidColorBrush _pending=Brush(Color.FromRgb(181,184,194));
     private SolidColorBrush _past=Brush(Color.FromRgb(236,240,247));
     private bool _reducedMotion;
+    private AlbumPalette? _lastAppliedTheme;
+    private bool _lastAppliedHighContrast;
     private double _glowStrength=.54;
     public double SizeScale {get;set;}=1;
     public bool HighContrast {get;set;}
     internal static double VisualGlowOpacity(double strength)=>
         Math.Clamp(strength,0,1)*.28;
     public double GlowStrength {get=>_glowStrength;set{
-        _glowStrength=Math.Clamp(value,0,1);
+        double next=Math.Clamp(value,0,1);
+        if(Math.Abs(next-_glowStrength)<.0001)return;
+        _glowStrength=next;
         _glow.Opacity=VisualGlowOpacity(_glowStrength);
     }}
     public int CurrentWordIndex=>_active>=0?_active:-1;
@@ -93,6 +97,12 @@ public sealed class KaraokeWords
     }
     public void ApplyTheme(AlbumPalette palette)
     {
+        // Album transitions can deliver identical quantized colors for many
+        // compositor frames. Reuse the frozen brushes and glyph layout.
+        if(_lastAppliedTheme is AlbumPalette last && last==palette &&
+            _lastAppliedHighContrast==HighContrast)return;
+        _lastAppliedTheme=palette;
+        _lastAppliedHighContrast=HighContrast;
         _pending=HighContrast?
             Brush(Color.FromRgb(226,231,239)):
             Brush(AlbumPalette.Mix(Color.FromRgb(185,187,194),

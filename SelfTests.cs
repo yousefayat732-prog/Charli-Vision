@@ -305,6 +305,23 @@ public static class SelfTests
         Check("Monochrome cover produces neutral palette",()=>gray.Monochrome);
         Check("Crossfade endpoints",()=>AlbumPalette.Lerp(red,blue,0)==red&&
             AlbumPalette.Lerp(red,blue,1)==blue);
+        Check("V7: repeated palette frames reuse frozen word brushes",()=>{
+            var renderer=new KaraokeWords(new System.Windows.Controls.WrapPanel());
+            var field=typeof(KaraokeWords).GetField("_pending",
+                System.Reflection.BindingFlags.Instance|
+                System.Reflection.BindingFlags.NonPublic);
+            renderer.ApplyTheme(red);
+            object? first=field?.GetValue(renderer);
+            renderer.ApplyTheme(red);
+            object? identical=field?.GetValue(renderer);
+            renderer.HighContrast=true;
+            renderer.ApplyTheme(red);
+            object? contrast=field?.GetValue(renderer);
+            renderer.ApplyTheme(blue);
+            return first is SolidColorBrush && ReferenceEquals(first,identical) &&
+                !ReferenceEquals(first,contrast) &&
+                contrast is SolidColorBrush b && b.IsFrozen;
+        });
         var paused=new PlaybackClock(TimeSpan.FromSeconds(18),
             TimeSpan.FromSeconds(190),DateTimeOffset.UtcNow.AddSeconds(-9),false,true);
         var running=new PlaybackClock(TimeSpan.FromSeconds(18),
@@ -913,6 +930,124 @@ public static class SelfTests
                 CancellationToken.None)).GetAwaiter().GetResult();
             return result.Quality=="Keine"&&!result.Synchronized;
         });
+        Check("V7: YouTube-Music-cache TTML parses actual word time ranges",()=>{
+            string ttml="<tt xmlns=\"http://www.w3.org/ns/ttml\"><body><div>"+
+                "<p begin=\"1.200\" end=\"3.000\"><span begin=\"1.200\" end=\"2.000\">Hello </span>"+
+                "<span begin=\"2.000\" end=\"3.000\">future</span></p></div></body></tt>";
+            var parsed=BetterLyricsTtml.Parse(ttml,TimeSpan.FromSeconds(20));
+            return parsed.Count==1 && parsed[0].Text=="Hello future" &&
+                parsed[0].Words is {Count:2} words &&
+                words[0].Start==TimeSpan.FromMilliseconds(1200) &&
+                words[0].End==TimeSpan.FromSeconds(2) &&
+                words[1].End==TimeSpan.FromSeconds(3);
+        });
+        Check("V7: TTML rejects invalid/unbounded external document",()=>{
+            string xml="<!DOCTYPE tt [<!ENTITY leak SYSTEM \"file:///C:/Windows/win.ini\">]>"+
+                "<tt><body><p begin=\"1.0\">&leak;</p></body></tt>";
+            return BetterLyricsTtml.Parse(xml).Count==0 &&
+                BetterLyricsTtml.Parse("<tt><p begin=\"bad\">No clock</p></tt>").Count==0;
+        });
+        Check("V7: cached YouTube-Music word lyrics rescue unavailable LRCLIB",()=>{
+            int cacheRequests=0;
+            var stub=new StubLyricsHttp((req,ct)=>{
+                string host=req.RequestUri!.Host;
+                if(host=="api.betterlyrics.org"){
+                    cacheRequests++;
+                    if(req.Headers.Contains("X-API-Key"))
+                        throw new InvalidOperationException("No private provider key permitted");
+                    string xml="<tt xmlns=\"http://www.w3.org/ns/ttml\"><body><div>"+
+                        "<p begin=\"1.000\" end=\"2.000\"><span begin=\"1.000\" "+
+                        "end=\"2.000\">Timed lyric</span></p></div></body></tt>";
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json(
+                        System.Text.Json.JsonSerializer.Serialize(new{ttml=xml,score=.96})));
+                }
+                if(req.RequestUri.AbsolutePath=="/api/search")
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json("[]"));
+                return System.Threading.Tasks.Task.FromResult(
+                    new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            });
+            using var service=new LyricsService(stub);
+            var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
+                "Cached Original","Test Performer","Verified Album",
+                TimeSpan.FromSeconds(90),CancellationToken.None))
+                .GetAwaiter().GetResult();
+            return result.Quality=="Word" && result.Synchronized &&
+                result.Lines.Count==1 &&
+                result.Lines[0].Words is {Count:1} && cacheRequests==1;
+        });
+        Check("V7: cache miss without API key falls back safely",()=>{
+            int cacheRequests=0;
+            var stub=new StubLyricsHttp((req,ct)=>{
+                if(req.RequestUri!.Host=="api.betterlyrics.org"){
+                    cacheRequests++;
+                    return System.Threading.Tasks.Task.FromResult(
+                        new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.Unauthorized));
+                }
+                if(req.RequestUri.AbsolutePath=="/api/search")
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json("[]"));
+                return System.Threading.Tasks.Task.FromResult(
+                    new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            });
+            using var service=new LyricsService(stub);
+            var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
+                "Uncached Original","Test Performer","Verified Album",
+                TimeSpan.FromSeconds(90),CancellationToken.None))
+                .GetAwaiter().GetResult();
+            return result.Quality=="Keine"&&!result.Synchronized&&cacheRequests==1;
+        });
+        Check("V7: lyrics.ovh suggestion finds a verified spelling variant",()=>{
+            var stub=new StubLyricsHttp((req,ct)=>{
+                string path=req.RequestUri!.AbsolutePath;
+                if(path.StartsWith("/suggest/",StringComparison.Ordinal))
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json(
+                        "{\"data\":[{\"title\":\"Simple-Song\",\"duration\":180,"+
+                        "\"artist\":{\"name\":\"Sample-Artist\"}}]}"));
+                if(path.Contains("Sample-Artist",StringComparison.Ordinal))
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json(
+                        "{\"lyrics\":\"Verified fallback verse\"}"));
+                if(path=="/api/search")
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json("[]"));
+                return System.Threading.Tasks.Task.FromResult(
+                    new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            });
+            using var service=new LyricsService(stub);
+            var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
+                "Simple Song","Sample Artist","",TimeSpan.FromSeconds(180),
+                CancellationToken.None)).GetAwaiter().GetResult();
+            if(result.Quality!="Plain" || result.Synchronized ||
+                result.PlainText!="Verified fallback verse" ||
+                !result.Source.Contains("alternative",StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "quality="+result.Quality+" status="+result.Status+
+                    " calls="+stub.Calls+" source="+result.Source);
+            return true;
+        });
+        Check("V7: suggestions cannot select wrong remixes or song durations",()=>{
+            int invalidFetches=0;
+            var stub=new StubLyricsHttp((req,ct)=>{
+                string path=req.RequestUri!.AbsolutePath;
+                if(path.StartsWith("/suggest/",StringComparison.Ordinal))
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json(
+                        "{\"data\":[{\"title\":\"Simple Song (Live)\",\"duration\":180,"+
+                        "\"artist\":{\"name\":\"Sample Artist\"}},"+
+                        "{\"title\":\"Simple-Song\",\"duration\":230,"+
+                        "\"artist\":{\"name\":\"Sample-Artist\"}}]}"));
+                if(path.StartsWith("/v1/",StringComparison.Ordinal))invalidFetches++;
+                if(path=="/api/search")
+                    return System.Threading.Tasks.Task.FromResult(StubLyricsHttp.Json("[]"));
+                return System.Threading.Tasks.Task.FromResult(
+                    new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            });
+            using var service=new LyricsService(stub);
+            var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
+                "Simple Song","Sample Artist","",TimeSpan.FromSeconds(180),
+                CancellationToken.None)).GetAwaiter().GetResult();
+            if(result.Quality!="Keine"||invalidFetches!=1)
+                throw new InvalidOperationException(
+                    "quality="+result.Quality+" fetches="+invalidFetches+
+                    " calls="+stub.Calls+" status="+result.Status);
+            return true;
+        });
         Check("V6: LRCLIB anonymous request has no unregistered App-Id",()=>{
             bool hasClient=false,hasInvalidAppId=false;
             var stub=new StubLyricsHttp((req,ct)=>{
@@ -945,7 +1080,7 @@ public static class SelfTests
             var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
                 "Original Sample","Sample Singer","Demo Album",
                 TimeSpan.FromSeconds(211),CancellationToken.None)).GetAwaiter().GetResult();
-            return stub.Calls==4 && result.Quality=="Plain" &&
+            return stub.Calls==5 && result.Quality=="Plain" &&
                 result.Source=="lyrics.ovh" && !result.Synchronized &&
                 result.Lines.Count==0 && result.PlainText=="Original sample stanza";
         });
@@ -998,7 +1133,7 @@ public static class SelfTests
             var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
                 "Sample Anthem","Sample Singer","Album",
                 TimeSpan.FromSeconds(200),CancellationToken.None)).GetAwaiter().GetResult();
-            return result.Quality=="Plain" && stub.Calls==2;
+            return result.Quality=="Plain" && stub.Calls==3;
         });
         Check("Lyrics requests cancel on song change without stale data",()=>{
             var stub=new StubLyricsHttp(async(req,ct)=>{
@@ -1690,6 +1825,29 @@ public static class SelfTests
                 "LIVE WORD-SYNC: NOT VERIFIED (source contains no validated word segments)");
         } catch(Exception ex) {
             report.Add("LIVE WORD-SYNC: NOT VERIFIED ("+ex.GetType().Name+")");
+        }
+        // Opt-in live cache smoke test; counts only, never stores copyrighted lyrics.
+        try{
+            using var client=new System.Net.Http.HttpClient{
+                Timeout=TimeSpan.FromSeconds(10)};
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("CharliVision/1.5");
+            string url="https://api.betterlyrics.org/getLyrics?s=E85"+
+                "&a=Don%20Toliver&al=OCTANE&d=154";
+            using var response=client.GetAsync(url).GetAwaiter().GetResult();
+            if(response.IsSuccessStatusCode){
+                using var doc=System.Text.Json.JsonDocument.Parse(
+                    response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+                string raw=doc.RootElement.GetProperty("ttml").GetString()??"";
+                var parsed=BetterLyricsTtml.Parse(raw,TimeSpan.FromSeconds(154));
+                int count=parsed.Sum(x=>x.Words?.Count??0);
+                report.Add(count>0?"LIVE YOUTUBE-MUSIC-CACHE: PASS (lines="+
+                    parsed.Count+", timed words="+count+")":
+                    "LIVE YOUTUBE-MUSIC-CACHE: NOT VERIFIED (no valid timecodes)");
+            }else report.Add("LIVE YOUTUBE-MUSIC-CACHE: NOT VERIFIED (HTTP "+
+                (int)response.StatusCode+")");
+        }catch(Exception ex){
+            report.Add("LIVE YOUTUBE-MUSIC-CACHE: NOT VERIFIED ("+
+                ex.GetType().Name+")");
         }
         report.Add("Pure tests failed="+failed);
         try {

@@ -2,7 +2,14 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
-## Aktueller Release v1.5.0 — LYRICS FULL RESTORATION V6
+## Aktueller Release v1.6.0 — ULTIMATE LYRICS V7
+
+- **Erweiterter kostenloser Lyrics-Fallback:** Nach LRCLIB kann der dokumentierte öffentliche Better-Lyrics-Cache nach tatsächlich zeitcodierten Lyrics suchen. Keine YouTube-Anmeldedaten, Scraping-Routinen oder bezahlten Schlüssel erforderlich; nicht gecachte Titel können weiterhin ohne Treffer bleiben.
+- **Native WPF-Wortsynchronisierung:** Der sichere TTML-Parser übernimmt nur vorhandene Zeitmarken; die bisherigen Word-, Line- und Plain-Lyrics-Darstellungen bleiben erhalten.
+- **Qualitätsprüfung:** Windows-Build und selbstenthaltender Release-Kandidat, automatische Tests, reale Cache-Antwort mit 36 Zeilen und 273 Wörtern, Online-Lyrics-Abdeckung und WPF-Lyrics-/GUI-Tests bestanden.
+- **Sicheres App-Update:** Signiertes RSA-PSS/SHA-256-Manifest mit dem bestehenden Update-Schlüssel, manuell startbarer Inno-Setup-Installer. Keine Windows-Authenticode-Signatur vorhanden.
+
+## Vorheriger Release v1.5.0 — LYRICS FULL RESTORATION V6
 
 - **Kritische Lyrics-Reparatur:** Der falsch konfigurierte LRCLIB-HTTP-Header verursachte HTTP 401 und damit leere Textbereiche. v1.5.0 verwendet wieder die offiziell zulässigen anonymen Client-Anfragen ohne registrierungspflichtige App-ID.
 - **Automatik wiederhergestellt:** Lyrics werden beim Spotify-Start und Songwechsel automatisch gesucht. Fehlversuche erhalten kontrollierte, abbrechbare Wiederholungen statt dauerhaft leerer Songtexte. Spät erkannte Laufzeiten lösen die passende neue Suche aus.
