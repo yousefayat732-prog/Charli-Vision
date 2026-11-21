@@ -10,7 +10,7 @@ Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify m
 - Einstellbare Vinyl-Grundgeschwindigkeit (24–52 RPM) und zuschaltbare, verlässliche musikadaptive RPM-Regelung. Unsicherer BPM ⇒ feste Geschwindigkeit.
 - Verbessertes Karaoke-Glow nur auf Buchstaben, zeitgerechte Zeilenübergänge; echte LRCLIB Wort/Zeilen-Lyrics, optionale rechtmäßige Offline-WhisperX-Ausrichtung und ungesynchter Lesetext.
 - Erweiterte Update-Seite: **„Update suchen und installieren“** führt Prüfung, Download und Signatur-/SHA-256-Verifikation mit einem Klick durch; der normale Windows-Installer bestätigt die Installation.
-- **110 Selbsttests bestanden**, echte Internet-Lyrics-Suche und Offline-Wort-Ausrichtung geprüft. **Ein echtes v1.0.0→v1.1.0-One-Click-Update** einschließlich Windows-Installer und Einstellungserhaltung wurde bestanden.
+- **110 Selbsttests bestanden**, echte Internet-Lyrics-Suche und Offline-Wort-Ausrichtung geprüft. **Zwei echte One-Click-Update-Tests** (v1.0.0→v1.1.0 und v1.1.0→v1.2.0) einschließlich GitHub-Download, Windows-Installer, EXE-Prüfsumme und vollständiger Einstellungserhaltung wurden bestanden.
 - Globale Tastenkombinationen werden nativ registriert, nur nach Aktivierung. Simulierte Tasteneingaben an andere Anwendungen blockierte Windows im Test; Drittanwendungen und Anti-Cheat-Spiele sind nicht als bestätigt markiert.
 - Die Auslieferung besitzt ein signiertes RSA-PSS-Update-Manifest, aber **keine Windows-Authenticode-Signatur** (kein Zertifikat verfügbar); Windows SmartScreen kann warnen. Keine Sicherheitsabfragen umgehen.
 

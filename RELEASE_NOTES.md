@@ -18,11 +18,12 @@ Windows 10/11 x64 — free standalone installer.
 - 110 automated self-tests passed, 0 failed (including tampered manifest and malicious URL rejection).
 - Real internet lyrics coverage: 14 cases = 5 Word, 6 Line, 2 Plain, 1 deliberately nonexistent; 2 cache hits.
 - Real owned local WhisperX demo voice/audio: 20 of 20 words aligned; no uncertain lines.
-- **Real one-click E2E** previously completed with live 1.0.0 app: clicked its UI Check/Install, downloaded validated 1.1.0 GitHub installer, clicked Windows Setup Install/Finish, confirmed installed hash and unchanged settings; production app restarted.
+- **Two real one-click E2E upgrades** passed: v1.0.0→v1.1.0 and v1.1.0→v1.2.0. Official signed GitHub asset detected and downloaded through the older app, Windows language/setup screens completed normally, installed exact EXE hash matched, zero user settings changed, production app restarted.
 - WPF screen captures of playback, design, hotkey settings and glass menu visually reviewed; text remains legible and controls fit. New dark glass scrollbar replaces bright native strip.
 - Performance run: High Refresh (180Hz monitor) WPF callback mean 5.63ms, p95 6.35ms, max 27.79ms; Smooth target 120 FPS mean 10.91ms, p95 23.12ms, max31.66ms; raw compositor callbacks were also delayed (p95 22.64ms). These are callback intervals, not actual GPU-present FPS.
 - Global RegisterHotKey registration: PASS. Chrome absent and Windows rejected synthetic input to ChatGPT/Discord; Spotify foreground switching blocked, therefore external-app physical hotkey delivery NOT VERIFIED.
-- v1.2.0 self-contained installer isolated install/uninstall and public signed-download verification must also pass before release publication.
+- Targeted Windows GPU Engine/Process Memory counters during app runtime: 3D engine 3.44% and dedicated VRAM 41.26MB in one snapshot; not a sustained load or true GPU-present FPS measurement.
+- v1.2.0 isolated install/uninstall and 110 installed self-tests: PASS; zero settings changes. The official v1.2.0 download hash was verified against the signed manifest during the real update run.
 
 ## Blocked or not fully verified
 - Authenticode: no valid private code-signing certificate or Windows SDK signtool present; installer remains unsigned at the Windows level, SmartScreen can still warn. The release **manifest** is independently RSA-PSS signed.

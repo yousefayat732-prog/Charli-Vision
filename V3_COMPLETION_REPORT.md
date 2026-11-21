@@ -19,11 +19,11 @@ This report distinguishes **implemented**, **tested**, and **blocked** work. The
 | Smooth UI / settings | DONE / PARTIAL | Interruptible pixel-based inertial scrolling and native custom scrollbar/slider; still needs more user-level subjective interaction testing. |
 | Global Win32 hotkeys | PARTIAL | RegisterHotKey test chord registered; external synthetic input blocked by OS/foreground rules. Chrome absent, Discord/ChatGPT input denied and Spotify foreground unavailable; protected games untested, no bypass. |
 | Settings / saved preferences | DONE | New RPM controls plus legacy setting preservation, per-value JSON comparison, no forced render-profile switch. 110 self-tests. |
-| One-click updater | DONE for real v1.0.0→v1.1.0 | Real UI buttons, signed release discovery, download, normal Inno install/finish, verified hash/version, no changed settings; old app replaced and production restarted. New v1.2 update UI has unit coverage and same security backend. |
+| One-click updater | DONE for real v1.0.0→v1.1.0 **and** v1.1.0→v1.2.0 | Two real UI-driven Windows upgrade runs passed: signed release detection, verified ~56MB official downloads, actual Inno Setup wizard (including German language confirmation in the second run), Install/Finish, installed release SHA/version, 0 changed settings and production app restarted. The new v1.2 one-click UI uses the same security backend but would need a newer release to test its new single-button shortcut. |
 | Windows standalone installer | DONE | Self-contained win-x64; separate v1.2 install/uninstall + installed EXE selftest, settings diff 0, licensing notices present. |
 | Authenticode | BLOCKED | No valid local code-signing certificate with private key, no signtool. Future fail-closed signing script included; no claimed Windows signature. |
 | Public GitHub | DONE | Official existing Charli-Vision repo and signed update manifest / release assets; no private release key or personal settings publicly included. |
-| GPU/VRAM and cross-machine compatibility | NOT TESTED | No reliable native GPU-present and per-process VRAM trace in this run. No exhaustive multi-monitor, Wallpaper Engine or protected-game certification. |
+| GPU/VRAM and cross-machine compatibility | PARTIAL | One local Windows GPU Engine performance-counter snapshot for the running app showed 3.44% on its 3D engine and 41.26MB dedicated GPU memory. Not a long-term load trace or GPU-present FPS count; no exhaustive multi-monitor, Wallpaper Engine or protected-game certification. |
 
 ### Detailed measured frame callback benchmarks
 These are **WPF UI callback intervals**, not actual GPU presentation timestamps, and do not imply 180 physical FPS:
