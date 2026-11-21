@@ -1067,6 +1067,125 @@ public static class SelfTests
             return delta>2 && delta<7 &&
                 disc.RotationSpeed>202 && disc.RotationSpeed<276;
         });
+        Check("V3 completion: equalizer full circle stays within 350px viewport",()=>{
+            if(VinylVisual.SpectrumTipWithGlow>174.95)return false;
+            if(VinylVisual.SpectrumTipRadius(1)<=VinylVisual.SpectrumTipRadius(0))
+                return false;
+            for(int bar=0;bar<92;bar++){
+                var tip=VinylVisual.SpectrumPoint(bar,1);
+                double distance=Math.Sqrt(tip.X*tip.X+tip.Y*tip.Y);
+                if(Math.Abs(distance-VinylVisual.SpectrumTipRadius(1))>.00001)
+                    return false;
+                var next=VinylVisual.SpectrumPoint((bar+1)%92,1);
+                double dot=tip.X*next.X+tip.Y*next.Y;
+                double expected=distance*distance*Math.Cos(2*Math.PI/92);
+                if(Math.Abs(dot-expected)>.001)return false;
+            }
+            return true;
+        });
+        Check("V3 completion: saved manual and adaptive vinyl settings round-trip",()=>{
+            var original=new AppSettings{
+                RenderProfile="Smooth",VinylBaseRpm=41.5,
+                AdaptiveVinylTempoEnabled=false,
+                Hotkeys=new(){{"PlayPause","Ctrl+Alt+P"}},
+                LyricsSpacing=20
+            };
+            var copy=System.Text.Json.JsonSerializer.Deserialize<AppSettings>(
+                System.Text.Json.JsonSerializer.Serialize(original));
+            return copy is not null && copy.RenderProfile=="Smooth" &&
+                copy.VinylBaseRpm==41.5 && !copy.AdaptiveVinylTempoEnabled &&
+                copy.Hotkeys["PlayPause"]=="Ctrl+Alt+P" &&
+                copy.LyricsSpacing==20;
+        });
+        Check("V3 completion: manual RPM overrides without changing settings",()=>{
+            var host=new MainWindow();
+            var field=typeof(MainWindow).GetField("_settings",
+                System.Reflection.BindingFlags.NonPublic|
+                System.Reflection.BindingFlags.Instance);
+            var cfg=(AppSettings?)field?.GetValue(host);
+            if(cfg is null)return false;
+            cfg.VinylBaseRpm=43.5;
+            cfg.AdaptiveVinylTempoEnabled=false;
+            double target=host.ComputeVinylRpm();
+            cfg.AdaptiveVinylTempoEnabled=true;
+            return Math.Abs(target-43.5)<.001 &&
+                Math.Abs(host.ComputeVinylRpm()-43.5)<.001;
+        });
+        Check("V3 completion: lyric transitions respond to tempo without timestamp drift",()=>{
+            double quiet=MainWindow.LineTransitionMs(950,1100,72);
+            double fast=MainWindow.LineTransitionMs(950,1100,151);
+            double neutral=MainWindow.LineTransitionMs(950,1100,null);
+            return quiet>neutral && neutral>fast && fast>=55 &&
+                quiet<=190 && MainWindow.LineTransitionMs(70,70,180)==55;
+        });
+        Check("V3 completion: karaoke highlight is glyph-bound and never overglows",()=>{
+            var panel=new System.Windows.Controls.WrapPanel();
+            var renderer=new KaraokeWords(panel){GlowStrength=1};
+            var line=new LyricLine(TimeSpan.Zero,"Hello",
+                new[]{new LyricWord(TimeSpan.Zero,TimeSpan.FromSeconds(1),"Hello")});
+            if(!renderer.Setup(line))return false;
+            renderer.Update(TimeSpan.FromMilliseconds(500));
+            var part=(System.Windows.Controls.TextBlock)panel.Children[0];
+            var glow=part.Effect as System.Windows.Media.Effects.DropShadowEffect;
+            return part.Foreground is System.Windows.Media.LinearGradientBrush &&
+                glow is not null && glow.BlurRadius<=6 &&
+                glow.Opacity<=.36 && renderer.CurrentWordIndex==0;
+        });
+        Check("V3 completion: premium slider updates manual RPM without persistence",()=>{
+            var host=new MainWindow();
+            var settings=new AppSettings();
+            var handle=new System.Windows.Window();
+            new System.Windows.Interop.WindowInteropHelper(handle).EnsureHandle();
+            using var hotkeys=new HotkeyManager(handle,settings,_=>{},_=>{});
+            var panel=new SettingsWindow(host,settings,hotkeys);
+            panel.NavigateTo("Design");
+            var sliders=panel.SettingsContent.Children
+                .OfType<System.Windows.Controls.Border>()
+                .SelectMany(card=>(card.Child as System.Windows.Controls.StackPanel)?
+                    .Children.OfType<System.Windows.Controls.Slider>() ??
+                    Enumerable.Empty<System.Windows.Controls.Slider>())
+                .ToArray();
+            var rpm=sliders.FirstOrDefault(s=>s.Minimum==24&&s.Maximum==52);
+            if(rpm is null)return false;
+            rpm.Value=44;
+            return Math.Abs(settings.VinylBaseRpm-44)<.01 &&
+                sliders.Length>=3;
+        });
+        Check("V3 completion: unsigned update manifest cannot execute",()=>{
+            var verify=typeof(VisionUpdateService).GetMethod("VerifySignedManifest",
+                System.Reflection.BindingFlags.Static|
+                System.Reflection.BindingFlags.NonPublic);
+            if(verify is null)return false;
+            foreach(var signature in new[]{"missing-signature","", "YWJj"}){
+                var trusted=verify.Invoke(null,new object[]{
+                    System.Text.Encoding.UTF8.GetBytes("{\"Version\":\"99.0.0\"}"),
+                    System.Text.Encoding.ASCII.GetBytes(signature)});
+                if(trusted is not false)return false;
+            }
+            return true;
+        });
+        Check("V3 completion: updater rejects forged asset URLs",()=>{
+            var urlMethod=typeof(VisionUpdateService).GetMethod("VerifiedAssetUrl",
+                System.Reflection.BindingFlags.Static|
+                System.Reflection.BindingFlags.NonPublic);
+            if(urlMethod is null)return false;
+            foreach(var uri in new[]{
+                "http://github.com/yousefayat732-prog/Charli-Vision/releases/download/v9/test.exe",
+                "https://example.com/yousefayat732-prog/Charli-Vision/releases/download/v9/test.exe",
+                "https://github.com/other/repo/releases/download/v9/test.exe"
+            }){
+                using var document=System.Text.Json.JsonDocument.Parse(
+                    System.Text.Json.JsonSerializer.Serialize(new{
+                        name="test.exe",browser_download_url=uri
+                    }));
+                try{
+                    urlMethod.Invoke(null,new object[]{document.RootElement,"test.exe"});
+                    return false;
+                }catch(System.Reflection.TargetInvocationException ex)
+                    when(ex.InnerException is InvalidDataException){}
+            }
+            return true;
+        });
         Check("Updater: strict version checks and no automatic installation",()=>{
             return VisionUpdateService.IsNewer("1.0.0","1.0.1") &&
                 !VisionUpdateService.IsNewer("1.0.1","1.0.0") &&

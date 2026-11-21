@@ -53,7 +53,10 @@ public partial class GlassMenuWindow : Window
         Height=MaxHeight;
         Flyout.CustomPopupPlacementCallback=PlaceFlyout;
         OuterShell.SizeChanged+=(_,e)=>UpdateCornerClip(e.NewSize);
-        SourceInitialized+=(_,_)=>CaptureBlurredBackdrop();
+        SourceInitialized+=(_,_)=>{
+            GlassWindowMaterial.Apply(this,transient:true);
+            CaptureBlurredBackdrop();
+        };
         _host.ChromaticPaletteChanged+=OnChromaticPaletteChanged;
         Loaded+=(_,_)=>{Rebuild();UpdateColors(true);};
         Closing+=(_,_)=>{_closing=true;Flyout.IsOpen=false;};

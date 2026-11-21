@@ -28,6 +28,8 @@ public sealed class AppSettings
     public bool PositionLocked { get; set; }=false;
     public bool WordAnimationEnabled { get; set; }=true;
     public bool VinylRotationEnabled { get; set; }=true;
+    public bool AdaptiveVinylTempoEnabled { get; set; }=true;
+    public double VinylBaseRpm { get; set; }=33.333;
     public double VinylScale { get; set; }=1;
     public double LyricsScale { get; set; }=1;
     public double LyricsSpacing { get; set; }=0;
@@ -65,6 +67,8 @@ public static class SettingsStore
         settings.VinylScale=Math.Clamp(settings.VinylScale,.7,1.18);
         settings.LyricsScale=Math.Clamp(settings.LyricsScale,.7,1.4);
         settings.LyricsSpacing=Math.Clamp(settings.LyricsSpacing,0,70);
+        settings.VinylBaseRpm=double.IsFinite(settings.VinylBaseRpm)?
+            Math.Clamp(settings.VinylBaseRpm,24,52):33.333;
         settings.AudioSensitivity=Math.Clamp(settings.AudioSensitivity,.5,2.5);
         settings.AudioSmoothing=Math.Clamp(settings.AudioSmoothing,.5,2.5);
         settings.LyricsGlow=Math.Clamp(settings.LyricsGlow,0,1);

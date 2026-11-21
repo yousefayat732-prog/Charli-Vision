@@ -2,6 +2,20 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
+## Aktueller Release v1.2.0 — Premium Glass / V3
+
+- Das **geprüfte v1.2.0 Windows-x64-Setup** ist unter [GitHub Releases](https://github.com/yousefayat732-prog/Charli-Vision/releases) verfügbar. Es benötigt keine separat installierte .NET-Laufzeit.
+- Vergrößertes Premium-Liquid-Glass-Design mit getönten Cards, Reflexen, 8 Neon-Vektorsymbolen, native Windows-11-DWM-Präferenz (wo unterstützt), schlankem Scrollbar und Slider.
+- Reparierter runder 92-Band-Equalizer ohne abgeschnittene Balken und mit sauberem 0°/360°-Übergang.
+- Einstellbare Vinyl-Grundgeschwindigkeit (24–52 RPM) und zuschaltbare, verlässliche musikadaptive RPM-Regelung. Unsicherer BPM ⇒ feste Geschwindigkeit.
+- Verbessertes Karaoke-Glow nur auf Buchstaben, zeitgerechte Zeilenübergänge; echte LRCLIB Wort/Zeilen-Lyrics, optionale rechtmäßige Offline-WhisperX-Ausrichtung und ungesynchter Lesetext.
+- Erweiterte Update-Seite: **„Update suchen und installieren“** führt Prüfung, Download und Signatur-/SHA-256-Verifikation mit einem Klick durch; der normale Windows-Installer bestätigt die Installation.
+- **110 Selbsttests bestanden**, echte Internet-Lyrics-Suche und Offline-Wort-Ausrichtung geprüft. **Ein echtes v1.0.0→v1.1.0-One-Click-Update** einschließlich Windows-Installer und Einstellungserhaltung wurde bestanden.
+- Globale Tastenkombinationen werden nativ registriert, nur nach Aktivierung. Simulierte Tasteneingaben an andere Anwendungen blockierte Windows im Test; Drittanwendungen und Anti-Cheat-Spiele sind nicht als bestätigt markiert.
+- Die Auslieferung besitzt ein signiertes RSA-PSS-Update-Manifest, aber **keine Windows-Authenticode-Signatur** (kein Zertifikat verfügbar); Windows SmartScreen kann warnen. Keine Sicherheitsabfragen umgehen.
+
+**FPS-Angaben sind Zielprofile, keine GPU-Present-Garantie.** Die Performance ist von WPF, Monitor, GPU und Windows-Compositor abhängig. Benutzerprofile, lokale Lyrics und Einstellungen bleiben beim Update erhalten. Weitere Details und offen ausgewiesene Testgrenzen stehen in [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
 ## Neu in v1.1.0 — Chromatic UI & Lyrics-Verbesserungen
 
 Diese Version bildet die **erste getestete Phase von Project Infinity Perfection V3**. Sie ist ausdrücklich **nicht** als Abschluss aller V3-Entwicklungsziele zu verstehen.
@@ -21,7 +35,7 @@ Diese Version bildet die **erste getestete Phase von Project Infinity Perfection
 
 ## Installation
 
-Unter Releases die Datei CharliVision-1.1.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
+Unter Releases die Datei CharliVision-1.2.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
 
 Der Installer ist noch NICHT mit Windows Authenticode signiert; SmartScreen kann warnen. Prüfsummen stehen im Release bereit.
 

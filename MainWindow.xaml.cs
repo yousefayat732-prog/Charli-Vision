@@ -187,7 +187,7 @@ public partial class MainWindow : Window
         _displayKey=identity;
         if(changed){
             _trackDetectedStamp=Stopwatch.GetTimestamp();
-            _tempo.Reset();Vinyl.TargetRotationRpm=33.333;
+            _tempo.Reset();Vinyl.TargetRotationRpm=_settings.VinylBaseRpm;
             _songKey=LyricsSyncSettings.SongKey(state.Title,state.Artist,state.Album,state.Duration);
         }
         _playing=state.Playing;
@@ -520,6 +520,17 @@ public partial class MainWindow : Window
                 EasingFunction=ease
             });
     }
+    // All lyric positions remain anchored to their actual source timestamps.
+    // Tempo only affects visual transition duration, never word/line selection.
+    internal static double LineTransitionMs(double forwardGap,double backwardGap,double? bpm)
+    {
+        double milliseconds=Math.Min(forwardGap,backwardGap)*.16;
+        if(bpm is double reliable && double.IsFinite(reliable)){
+            if(reliable>=140)milliseconds*=.84;
+            else if(reliable<=80)milliseconds*=1.12;
+        }
+        return Math.Clamp(milliseconds,55,190);
+    }
     private void UpdateLyrics()
     {
         if(_lines.Count==0)return;
@@ -567,7 +578,7 @@ public partial class MainWindow : Window
             forwardGap;
         // Rapid lyrics get a short transition. The correct word is already
         // selected before animation begins, avoiding delayed highlighting.
-        double timeMs=Math.Clamp(Math.Min(forwardGap,backwardGap)*.16,55,190);
+        double timeMs=LineTransitionMs(forwardGap,backwardGap,_tempo.EstimatedBpm);
         // On fast tracks transitions shorten, never delaying word timestamps.
         if(_settings.ReducedMotion){
             ActiveLyric.BeginAnimation(OpacityProperty,null);
@@ -709,8 +720,9 @@ public partial class MainWindow : Window
         if(_audio.Available&&_playing){
             _audio.SnapshotInto(_audioFrameLevels);
             levels=_audioFrameLevels;
-            _tempo.Observe(now,_audioFrameLevels);
-            Vinyl.TargetRotationRpm=MusicTempoEstimator.TargetRpm(_tempo.EstimatedBpm);
+            if(_settings.AdaptiveVinylTempoEnabled)
+                _tempo.Observe(now,_audioFrameLevels);
+            Vinyl.TargetRotationRpm=ComputeVinylRpm();
         }
         Vinyl.Tick(dt,levels);
         if(_forceThemeRefresh)ApplyTheme();
@@ -993,8 +1005,17 @@ public partial class MainWindow : Window
         Path.Combine(SettingsStore.DirectoryPath,"chromatic-settings-preview.png"));
     internal void CaptureGlassSyncPreview()=>_glassMenu?.CaptureSyncPreview(
         Path.Combine(SettingsStore.DirectoryPath,"glass-sync-preview.png"));
+    internal double ComputeVinylRpm()
+    {
+        double fixedRpm=Math.Clamp(_settings.VinylBaseRpm,24,52);
+        if(!_settings.AdaptiveVinylTempoEnabled || _tempo.EstimatedBpm is null)
+            return fixedRpm;
+        double delta=MusicTempoEstimator.TargetRpm(_tempo.EstimatedBpm)-33.333;
+        return Math.Clamp(fixedRpm+delta,24,52);
+    }
     internal void ApplyControlSettings()
     {
+        Vinyl.TargetRotationRpm=ComputeVinylRpm();
         Vinyl.CoverRotates=_settings.CoverRotates;
         Vinyl.CenterTransparent=_settings.VinylCenterTransparent;
         Vinyl.RotationEnabled=_settings.VinylRotationEnabled;

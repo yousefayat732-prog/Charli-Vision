@@ -116,7 +116,10 @@ BiQPQcqQ6AzDvc1/db5JkFTDPzpIZFQcdSUqh4byR8EhAgMBAAE=
     }
     public async Task CheckAsync(bool force=false,CancellationToken token=default)
     {
-        if(!await _gate.WaitAsync(0,token))return;
+        // Explicit user-initiated checks wait for a concurrent background check;
+        // silently returning here made the Update button appear unresponsive.
+        if(force)await _gate.WaitAsync(token);
+        else if(!await _gate.WaitAsync(0,token))return;
         try{
             if(!force && DateTime.UtcNow-_lastChecked<TimeSpan.FromHours(18))
                 return;
@@ -168,6 +171,10 @@ BiQPQcqQ6AzDvc1/db5JkFTDPzpIZFQcdSUqh4byR8EhAgMBAAE=
             ReleaseNotes=root.TryGetProperty("body",out var body)
                 ?(body.GetString()??"")[..Math.Min(1600,(body.GetString()??"").Length)]:"";
             Status="Update verfügbar — verifiziert: "+version;
+        }
+        catch(OperationCanceledException) when(!token.IsCancellationRequested){
+            _offer=null;
+            Status="Updateprüfung: Netzwerk-Zeitüberschreitung.";
         }
         catch(Exception ex) when(ex is not OperationCanceledException){
             _offer=null;
@@ -222,9 +229,12 @@ BiQPQcqQ6AzDvc1/db5JkFTDPzpIZFQcdSUqh4byR8EhAgMBAAE=
             Status="Verifiziert — Installation wird gestartet";
             _ = Process.Start(new ProcessStartInfo{
                 FileName=target,UseShellExecute=true,
-                Arguments="/NORESTART"
+                Arguments="/NORESTART /CLOSEAPPLICATIONS"
             }) ?? throw new InvalidOperationException("Installer konnte nicht starten.");
             return true;
+        }catch(OperationCanceledException) when(!token.IsCancellationRequested){
+            Status="Update-Download: Netzwerk-Zeitüberschreitung.";
+            return false;
         }catch(Exception ex) when(ex is not OperationCanceledException){
             Status="Update fehlgeschlagen: "+ex.Message;
             SettingsStore.Log(ex);

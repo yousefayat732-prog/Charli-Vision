@@ -42,7 +42,10 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _host=host;_settings=settings;_hotkeys=hotkeys;
         _scroll=new SmoothScrollController(SettingsScroller,()=>_settings.ReducedMotion);
-        SourceInitialized+=(_,_)=>CaptureBackdrop();
+        SourceInitialized+=(_,_)=>{
+            GlassWindowMaterial.Apply(this);
+            CaptureBackdrop();
+        };
         GlassBackdrop.SizeChanged+=(_,e)=>{
             if(e.NewSize.Width>0&&e.NewSize.Height>0){
                 var clip=new RectangleGeometry(new Rect(0,0,
@@ -150,6 +153,14 @@ public partial class SettingsWindow : Window
         Resources["GlassSurfaceTint"]=new SolidColorBrush(Color.FromArgb(
             _glassTintAlpha,tokens.GlassSurface.R,
             tokens.GlassSurface.G,tokens.GlassSurface.B));
+        Resources["GlassHeaderSurface"]=GlassWindowMaterial.Header(tokens);
+        Resources["GlassSidebarSurface"]=GlassWindowMaterial.Sidebar(tokens);
+        Resources["GlassFooterSurface"]=GlassWindowMaterial.Footer(tokens);
+        Resources["GlassCardSurface"]=GlassWindowMaterial.Card(tokens);
+        Resources["GlassButtonSurface"]=GlassWindowMaterial.Button(tokens);
+        Resources["GlassIconTile"]=GlassWindowMaterial.IconTile(tokens);
+        Resources["GlassAmbientLight"]=GlassWindowMaterial.Ambient(tokens);
+        Resources["GlassToggleOff"]=new SolidColorBrush(Color.FromRgb(51,72,83));
     }
     internal void NavigateTo(string section)
     {
@@ -223,12 +234,13 @@ public partial class SettingsWindow : Window
         box.Children.Add(details);
         var card=new Border {
             CornerRadius=new CornerRadius(14),
-            Background=new SolidColorBrush(Color.FromArgb(238,25,37,48)),
+            Background=(Brush)Resources["GlassCardSurface"],
             BorderBrush=(Brush)Resources["BorderBrushCustom"],
             BorderThickness=new Thickness(1),
             Margin=new Thickness(1,0,7,13),
             Child=box
         };
+        card.SetResourceReference(Border.BackgroundProperty,"GlassCardSurface");
         card.SetResourceReference(Border.BorderBrushProperty,"BorderBrushCustom");
         SettingsContent.Children.Add(card);
         return box;
@@ -530,6 +542,11 @@ public partial class SettingsWindow : Window
             _settings.VinylQuality,v=>_settings.VinylQuality=v);
         Toggle(vinyl,"Vinyl-Disc drehen",_settings.VinylRotationEnabled,
             v=>_settings.VinylRotationEnabled=v);
+        Slider(vinyl,"Grundgeschwindigkeit",_settings.VinylBaseRpm,24,52,.5," RPM",
+            v=>_settings.VinylBaseRpm=v);
+        Toggle(vinyl,"Musikadaptive Drehzahl (bei zuverlässigem Takt)",
+            _settings.AdaptiveVinylTempoEnabled,v=>_settings.AdaptiveVinylTempoEnabled=v,
+            "Echte lokale Audioimpulse, kein erfundener BPM-Wert; sonst feste Grundgeschwindigkeit.");
         Toggle(vinyl,"Albumcover dreht mit",_settings.CoverRotates,v=>_settings.CoverRotates=v);
         Toggle(vinyl,"Mittelloch: echter transparenter Desktop-Hintergrund",
             _settings.VinylCenterTransparent,v=>_settings.VinylCenterTransparent=v,
@@ -618,17 +635,34 @@ public partial class SettingsWindow : Window
             state.Text=VisionUpdateService.Shared.Status;
             notes.Text=VisionUpdateService.Shared.ReleaseNotes;
         }
-        Actions(update,
-            Button("Nach Updates suchen",async()=>{
-                state.Text="Prüfe GitHub-Release …";
+        bool updateBusy=false;
+        var searchUpdate=Button("Nur nach Updates suchen",async()=>{
+            if(updateBusy)return;
+            updateBusy=true;
+            try{
+                state.Text="Prüfe signiertes GitHub-Release …";
                 await VisionUpdateService.Shared.CheckAsync(force:true);
                 RefreshUpdates();
-            }),
-            Button("Jetzt aktualisieren",async()=>{
+            }catch(OperationCanceledException){
+                state.Text="Updateprüfung abgebrochen.";
+            }catch(Exception ex){
+                SettingsStore.Log(ex);state.Text="Updateprüfung fehlgeschlagen.";
+            }finally{updateBusy=false;}
+        });
+        var installUpdate=Button("Update suchen und installieren",async()=>{
+            if(updateBusy)return;
+            updateBusy=true;
+            searchUpdate.IsEnabled=false;
+            try{
+                // ONE explicit button click performs both discovery and download.
+                // OS consent and the Inno Setup wizard are intentionally respected.
                 if(!VisionUpdateService.Shared.CanInstall){
-                    RefreshUpdates();return;
+                    state.Text="Prüfe signiertes GitHub-Release …";
+                    await VisionUpdateService.Shared.CheckAsync(force:true);
                 }
-                state.Text="Prüfe und lade signierten Installer …";
+                RefreshUpdates();
+                if(!VisionUpdateService.Shared.CanInstall)return;
+                state.Text="Signierten Installer laden und prüfen …";
                 var report=new Progress<(long received,long total)>(value=>{
                     if(value.total>0)
                         progress.Value=Math.Clamp(value.received*100d/value.total,0,100);
@@ -638,7 +672,16 @@ public partial class SettingsWindow : Window
                 bool started=await VisionUpdateService.Shared.DownloadAndStartInstallerAsync(report);
                 RefreshUpdates();
                 if(started)_host.ExitFromSettings();
-            }));
+            }catch(OperationCanceledException){
+                state.Text="Update abgebrochen.";
+            }catch(Exception ex){
+                SettingsStore.Log(ex);state.Text="Update fehlgeschlagen: "+ex.Message;
+            }finally{
+                updateBusy=false;
+                searchUpdate.IsEnabled=true;
+            }
+        });
+        Actions(update,searchUpdate,installUpdate);
         var status=Card("DIAGNOSE & HILFE",
             "Charli Vision benötigt keine kostenpflichtigen API-Keys.");
         status.Children.Add(Text(_host.GetLiveDiagnostics(),12,true));

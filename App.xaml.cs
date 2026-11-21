@@ -69,6 +69,11 @@ public partial class App : Application
             Shutdown();
             return;
         }
+        if(Array.Exists(e.Args,x=>x.Equals("--hotkey-e2e",StringComparison.OrdinalIgnoreCase))){
+            bool okay=GlobalHotkeySmokeTest.Run();
+            if(!okay)Environment.ExitCode=1;
+            Shutdown();return;
+        }
         _instanceMutex = new Mutex(true,@"Local\CharliVisionStandaloneApp",out _ownsMutex);
         if (!_ownsMutex) { Shutdown(); return; }
         base.OnStartup(e);
@@ -76,19 +81,22 @@ public partial class App : Application
         if(Array.Exists(e.Args,x=>x.StartsWith("--settings-preview",StringComparison.OrdinalIgnoreCase)) ||
            Array.Exists(e.Args,x=>x.Equals("--glass-capture",StringComparison.OrdinalIgnoreCase)) ||
            Array.Exists(e.Args,x=>x.Equals("--glass-capture-sync",StringComparison.OrdinalIgnoreCase)) ||
-           Array.Exists(e.Args,x=>x.Equals("--settings-capture",StringComparison.OrdinalIgnoreCase)))
+           Array.Exists(e.Args,x=>x.StartsWith("--settings-capture",StringComparison.OrdinalIgnoreCase)))
             Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                 if(MainWindow is MainWindow overlay){
                     if(Array.Exists(e.Args,x=>x.Equals("--settings-preview-keys",
                         StringComparison.OrdinalIgnoreCase)))
                         overlay.OpenAdvancedSettings("Keys");
-                    else if(Array.Exists(e.Args,x=>x.Equals("--settings-capture",
+                    else if(Array.Exists(e.Args,x=>x.StartsWith("--settings-capture",
                         StringComparison.OrdinalIgnoreCase)))
-                        overlay.OpenAdvancedSettings("Playback");
+                        overlay.OpenAdvancedSettings(
+                            Array.Exists(e.Args,x=>x.EndsWith("-design",StringComparison.OrdinalIgnoreCase))?
+                            "Design":Array.Exists(e.Args,x=>x.EndsWith("-keys",StringComparison.OrdinalIgnoreCase))?
+                            "Keys":"Playback");
                     else overlay.OpenSettings();
                     if(Array.Exists(e.Args,x=>x.StartsWith("--glass-capture",
                         StringComparison.OrdinalIgnoreCase)) ||
-                       Array.Exists(e.Args,x=>x.Equals("--settings-capture",
+                       Array.Exists(e.Args,x=>x.StartsWith("--settings-capture",
                         StringComparison.OrdinalIgnoreCase))){
                         var previewTimer=new DispatcherTimer{
                             Interval=TimeSpan.FromMilliseconds(650)};
@@ -98,7 +106,7 @@ public partial class App : Application
                                 if(Array.Exists(e.Args,x=>x.Equals("--glass-capture-sync",
                                     StringComparison.OrdinalIgnoreCase)))
                                     overlay.CaptureGlassSyncPreview();
-                                else if(Array.Exists(e.Args,x=>x.Equals("--settings-capture",
+                                else if(Array.Exists(e.Args,x=>x.StartsWith("--settings-capture",
                                     StringComparison.OrdinalIgnoreCase)))
                                     overlay.CaptureSettingsPreview();
                                 else overlay.CaptureGlassPreview();

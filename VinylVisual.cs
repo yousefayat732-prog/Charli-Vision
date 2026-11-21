@@ -16,6 +16,16 @@ public sealed class VinylVisual : FrameworkElement
 {
     private const int Bars=92,PaletteSteps=24;
     private const double RecordRadius=139,SpectrumRadius=151.5;
+    // 350px viewport radius=175; even maximum rounded glow must fit inside.
+    private const double SpectrumMaximumGlowRadius=4.65;
+    internal static double SpectrumTipRadius(double normalized)=>
+        SpectrumRadius+3.4+14.45*Math.Pow(Math.Clamp(normalized,0,1),.83);
+    internal static double SpectrumTipWithGlow=>SpectrumTipRadius(1)+SpectrumMaximumGlowRadius;
+    internal static (double X,double Y) SpectrumPoint(int bar,double normalized){
+        double angle=2*Math.PI*bar/Bars-Math.PI/2;
+        double r=SpectrumTipRadius(normalized);
+        return (r*Math.Cos(angle),r*Math.Sin(angle));
+    }
     private readonly float[] _display=new float[Bars];
     private readonly double[] _cos=new double[Bars],_sin=new double[Bars];
     private readonly Pen[] _corePens=new Pen[16],_glowPens=new Pen[16];
@@ -428,7 +438,9 @@ public sealed class VinylVisual : FrameworkElement
             double raw=Math.Clamp(value,0,1);
             int index=Math.Clamp((int)Math.Round(raw*15),0,15);
             double start=SpectrumRadius+1.2;
-            double end=start+2.2+22.8*Math.Pow(raw,.83);
+            // Previously the 177.7px endpoint exceeded the 175px viewport.
+            // Keep max rounded pen/glow fully inside all 360° of the ring.
+            double end=SpectrumTipRadius(raw);
             var a=new Point(start*_cos[i],start*_sin[i]);
             var b=new Point(end*_cos[i],end*_sin[i]);
             if(raw>.065 && _quality!=VinylQuality.UltraLight)

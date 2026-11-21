@@ -1,8 +1,8 @@
 <Window x:Class="CharliVision.SettingsWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="Charli Vision — Einstellungen" Width="980" Height="680"
- Icon="/CharliVision.ico" MinWidth="800" MinHeight="565" WindowStartupLocation="CenterScreen"
+ Title="Charli Vision — Einstellungen" Width="1120" Height="760"
+ Icon="/CharliVision.ico" MinWidth="900" MinHeight="600" WindowStartupLocation="CenterScreen"
  WindowStyle="None" ResizeMode="CanResize" Background="#0D141D"
  ShowInTaskbar="True" Focusable="True" UseLayoutRounding="True">
  <Window.Resources>
@@ -14,18 +14,63 @@
   <SolidColorBrush x:Key="TextPrimary" Color="#FFF1F6FC"/>
   <SolidColorBrush x:Key="TextSecondary" Color="#FFAFBFCC"/>
   <SolidColorBrush x:Key="IconBrush" Color="#FFE4F0FF"/>
-  <SolidColorBrush x:Key="GlassSurfaceTint" Color="#F0101923"/>
+  <SolidColorBrush x:Key="GlassSurfaceTint" Color="#D7162734"/>
+  <SolidColorBrush x:Key="GlassHeaderSurface" Color="#E62E4858"/>
+  <SolidColorBrush x:Key="GlassSidebarSurface" Color="#E3213442"/>
+  <SolidColorBrush x:Key="GlassFooterSurface" Color="#E3233743"/>
+  <SolidColorBrush x:Key="GlassCardSurface" Color="#D6223646"/>
+  <SolidColorBrush x:Key="GlassButtonSurface" Color="#A5425B70"/>
+  <SolidColorBrush x:Key="GlassIconTile" Color="#754D6578"/>
+  <SolidColorBrush x:Key="GlassAmbientLight" Color="#333E7A94"/>
+  <SolidColorBrush x:Key="GlassToggleOff" Color="#FF354957"/>
   <Style TargetType="TextBlock">
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+  </Style>
+  <Style x:Key="GlassNavIcon" TargetType="Border">
+   <Setter Property="Width" Value="33"/>
+   <Setter Property="Height" Value="33"/>
+   <Setter Property="CornerRadius" Value="10"/>
+   <Setter Property="Background" Value="{DynamicResource GlassIconTile}"/>
+   <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushCustom}"/>
+   <Setter Property="BorderThickness" Value="1"/>
+   <Setter Property="RenderTransformOrigin" Value=".5,.5"/>
+   <Setter Property="RenderTransform">
+    <Setter.Value><ScaleTransform ScaleX="1" ScaleY="1"/></Setter.Value>
+   </Setter>
+   <Style.Triggers>
+    <Trigger Property="IsMouseOver" Value="True">
+     <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+     <Trigger.EnterActions>
+      <BeginStoryboard>
+       <Storyboard>
+        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+          To="1.055" Duration="0:0:0.14"/>
+        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+          To="1.055" Duration="0:0:0.14"/>
+       </Storyboard>
+      </BeginStoryboard>
+     </Trigger.EnterActions>
+     <Trigger.ExitActions>
+      <BeginStoryboard>
+       <Storyboard>
+        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+          To="1" Duration="0:0:0.14"/>
+        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+          To="1" Duration="0:0:0.14"/>
+       </Storyboard>
+      </BeginStoryboard>
+     </Trigger.ExitActions>
+    </Trigger>
+   </Style.Triggers>
   </Style>
   <Style x:Key="NavButton" TargetType="Button">
    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
    <Setter Property="FontSize" Value="14"/>
    <Setter Property="FontWeight" Value="SemiBold"/>
-   <Setter Property="Margin" Value="10,2"/>
-   <Setter Property="Padding" Value="16,11"/>
+   <Setter Property="Margin" Value="10,3"/>
+   <Setter Property="Padding" Value="12,9"/>
    <Setter Property="HorizontalContentAlignment" Value="Left"/>
    <Setter Property="Cursor" Value="Hand"/>
    <Setter Property="Background" Value="Transparent"/>
@@ -33,7 +78,7 @@
    <Setter Property="Template">
     <Setter.Value>
      <ControlTemplate TargetType="Button">
-      <Border x:Name="Base" CornerRadius="11" Background="{TemplateBinding Background}"
+      <Border x:Name="Base" CornerRadius="12" Background="{TemplateBinding Background}"
           Padding="{TemplateBinding Padding}">
        <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
       </Border>
@@ -51,15 +96,15 @@
    </Setter>
   </Style>
   <Style x:Key="ActionButton" TargetType="Button">
-   <Setter Property="Background" Value="#FF243645"/>
+   <Setter Property="Background" Value="{DynamicResource GlassButtonSurface}"/>
    <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
-   <Setter Property="BorderBrush" Value="#587A92A6"/>
+   <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushCustom}"/>
    <Setter Property="BorderThickness" Value="1"/>
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
    <Setter Property="FontWeight" Value="SemiBold"/>
    <Setter Property="FontSize" Value="13"/>
-   <Setter Property="Padding" Value="15,9"/>
-   <Setter Property="Margin" Value="0,3,9,3"/>
+   <Setter Property="Padding" Value="17,10"/>
+   <Setter Property="Margin" Value="0,4,9,4"/>
    <Setter Property="Cursor" Value="Hand"/>
    <Setter Property="Template">
     <Setter.Value>
@@ -98,7 +143,7 @@
      <ControlTemplate TargetType="CheckBox">
       <DockPanel LastChildFill="True">
        <Border Width="45" Height="24" CornerRadius="12" DockPanel.Dock="Right"
-        Background="#FF344351" x:Name="Track" Margin="15,0,0,0">
+        Background="{DynamicResource GlassToggleOff}" x:Name="Track" Margin="15,0,0,0">
         <Ellipse Width="17" Height="17" Fill="#FFF1F6FB" Margin="3"
          HorizontalAlignment="Left" x:Name="Thumb"/>
        </Border>
@@ -118,31 +163,125 @@
     </Setter.Value>
    </Setter>
   </Style>
+  <Style x:Key="PremiumScrollThumb" TargetType="Thumb">
+   <Setter Property="MinHeight" Value="28"/>
+   <Setter Property="Width" Value="8"/>
+   <Setter Property="Opacity" Value=".70"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Thumb">
+      <Border Margin="1,0,1,0" Background="{DynamicResource GlassIconTile}"
+        BorderBrush="{DynamicResource BorderBrushCustom}"
+        BorderThickness=".8" CornerRadius="4"/>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+   <Style.Triggers>
+    <Trigger Property="IsMouseOver" Value="True">
+     <Setter Property="Opacity" Value="1"/>
+    </Trigger>
+   </Style.Triggers>
+  </Style>
   <Style TargetType="ScrollBar">
-   <Setter Property="Width" Value="10"/>
-   <Setter Property="Background" Value="#14212B"/>
+   <Setter Property="Width" Value="11"/>
+   <Setter Property="Background" Value="Transparent"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="ScrollBar">
+      <Grid Background="#100C1720">
+       <Track x:Name="PART_Track" IsDirectionReversed="True">
+        <Track.DecreaseRepeatButton>
+         <RepeatButton Command="ScrollBar.PageUpCommand"
+           Opacity="0" Focusable="False"/>
+        </Track.DecreaseRepeatButton>
+        <Track.Thumb>
+         <Thumb Style="{StaticResource PremiumScrollThumb}"/>
+        </Track.Thumb>
+        <Track.IncreaseRepeatButton>
+         <RepeatButton Command="ScrollBar.PageDownCommand"
+           Opacity="0" Focusable="False"/>
+        </Track.IncreaseRepeatButton>
+       </Track>
+      </Grid>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+  <Style x:Key="PremiumSliderThumb" TargetType="Thumb">
+   <Setter Property="Width" Value="17"/>
+   <Setter Property="Height" Value="17"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Thumb">
+      <Ellipse Fill="{DynamicResource TextPrimary}"
+        Stroke="{DynamicResource AccentBrush}" StrokeThickness="2">
+       <Ellipse.Effect>
+        <DropShadowEffect Color="#FF90C4F4" ShadowDepth="0"
+          BlurRadius="7" Opacity=".36"/>
+       </Ellipse.Effect>
+      </Ellipse>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+  <Style TargetType="Slider">
+   <Setter Property="Height" Value="22"/>
    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Slider">
+      <Grid Background="Transparent">
+       <Track x:Name="PART_Track" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
+        <Track.DecreaseRepeatButton>
+         <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+          <RepeatButton.Template>
+           <ControlTemplate TargetType="RepeatButton">
+            <Border Height="5" CornerRadius="3"
+              Background="{DynamicResource AccentBrush}"/>
+           </ControlTemplate>
+          </RepeatButton.Template>
+         </RepeatButton>
+        </Track.DecreaseRepeatButton>
+        <Track.Thumb>
+         <Thumb Style="{StaticResource PremiumSliderThumb}"/>
+        </Track.Thumb>
+        <Track.IncreaseRepeatButton>
+         <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+          <RepeatButton.Template>
+           <ControlTemplate TargetType="RepeatButton">
+            <Border Height="5" CornerRadius="3" Background="#584F6475"/>
+           </ControlTemplate>
+          </RepeatButton.Template>
+         </RepeatButton>
+        </Track.IncreaseRepeatButton>
+       </Track>
+      </Grid>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
   </Style>
  </Window.Resources>
  <Grid>
-  <Image x:Name="GlassBackdrop" Margin="7" Opacity=".62"
+  <Image x:Name="GlassBackdrop" Margin="9" Opacity=".74"
     Stretch="Fill" IsHitTestVisible="False" SnapsToDevicePixels="True">
    <Image.Effect>
     <BlurEffect Radius="17" RenderingBias="Performance"/>
    </Image.Effect>
   </Image>
+  <Border Margin="10" CornerRadius="22" ClipToBounds="True" IsHitTestVisible="False"
+    Background="{DynamicResource GlassAmbientLight}" Opacity=".75"/>
  <Border BorderThickness="1" BorderBrush="{DynamicResource BorderBrushCustom}"
-         CornerRadius="17" Background="{DynamicResource GlassSurfaceTint}" Margin="7">
+         CornerRadius="23" Background="{DynamicResource GlassSurfaceTint}" Margin="9">
   <Border.Effect>
    <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="5" Opacity=".47"/>
   </Border.Effect>
   <Grid ClipToBounds="True">
    <Grid.RowDefinitions>
-    <RowDefinition Height="74"/>
+    <RowDefinition Height="82"/>
     <RowDefinition Height="*"/>
-    <RowDefinition Height="46"/>
+    <RowDefinition Height="48"/>
    </Grid.RowDefinitions>
-   <Border Grid.Row="0" Background="#D91A2833" BorderBrush="{DynamicResource BorderBrushCustom}"
+   <Border Grid.Row="0" Background="{DynamicResource GlassHeaderSurface}" BorderBrush="{DynamicResource BorderBrushCustom}"
            BorderThickness="0,0,0,1" MouseLeftButtonDown="HeaderDown">
     <Grid Margin="25,0,18,0">
      <Grid.ColumnDefinitions>
@@ -180,14 +319,14 @@
    </Border>
    <Grid Grid.Row="1">
     <Grid.ColumnDefinitions>
-     <ColumnDefinition Width="255"/>
+     <ColumnDefinition Width="270"/>
      <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
-    <Border Grid.Column="0" Background="#C715202B"
+    <Border Grid.Column="0" Background="{DynamicResource GlassSidebarSurface}"
       BorderBrush="#3555687B" BorderThickness="0,0,1,0">
      <DockPanel>
       <StackPanel DockPanel.Dock="Bottom" Margin="19,12,19,21">
-       <Border Background="#202F3B" BorderBrush="{DynamicResource BorderBrushCustom}"
+       <Border Background="{DynamicResource GlassCardSurface}" BorderBrush="{DynamicResource BorderBrushCustom}"
           BorderThickness="1" CornerRadius="11" Padding="12">
         <StackPanel>
          <TextBlock Text="DESKTOP MODE" Foreground="{DynamicResource AccentBrush}"
@@ -203,11 +342,19 @@
        <Button x:Name="NavPlayback" Style="{StaticResource NavButton}"
         Click="NavClicked" Tag="Playback">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-         <Path Width="20" Height="20" Stretch="Uniform"
+         <Border Style="{StaticResource GlassNavIcon}">
+          <Path Width="19" Height="19" Stretch="Uniform"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
            Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            StrokeThickness="1.7" StrokeStartLineCap="Round"
            StrokeEndLineCap="Round" StrokeLineJoin="Round"
-           Data="M9,5 L19,12 L9,19 Z"/>
+           Data="M9,5 L19,12 L9,19 Z">
+           <Path.Effect>
+            <DropShadowEffect Color="#A7D9F5" BlurRadius="4"
+             ShadowDepth="0" Opacity=".22"/>
+           </Path.Effect>
+          </Path>
+         </Border>
          <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
            Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            Text="Wiedergabe"/>
@@ -216,11 +363,19 @@
        <Button x:Name="NavLyrics" Style="{StaticResource NavButton}"
         Click="NavClicked" Tag="Lyrics">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-         <Path Width="20" Height="20" Stretch="Uniform"
+         <Border Style="{StaticResource GlassNavIcon}">
+          <Path Width="19" Height="19" Stretch="Uniform"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
            Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            StrokeThickness="1.7" StrokeStartLineCap="Round"
            StrokeEndLineCap="Round" StrokeLineJoin="Round"
-           Data="M7,18 V6 L19,4 V16 M7,6 L19,4 M7,18 C7,20 3,20 3,18 C3,16 7,16 7,18 M19,16 C19,18 15,18 15,16 C15,14 19,14 19,16"/>
+           Data="M7,18 V6 L19,4 V16 M7,6 L19,4 M7,18 C7,20 3,20 3,18 C3,16 7,16 7,18 M19,16 C19,18 15,18 15,16 C15,14 19,14 19,16">
+           <Path.Effect>
+            <DropShadowEffect Color="#A7D9F5" BlurRadius="4"
+             ShadowDepth="0" Opacity=".22"/>
+           </Path.Effect>
+          </Path>
+         </Border>
          <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
            Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            Text="Lyrics &amp; Sync"/>
@@ -229,11 +384,19 @@
        <Button x:Name="NavLayout" Style="{StaticResource NavButton}"
         Click="NavClicked" Tag="Layout">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-         <Path Width="20" Height="20" Stretch="Uniform"
+         <Border Style="{StaticResource GlassNavIcon}">
+          <Path Width="19" Height="19" Stretch="Uniform"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
            Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            StrokeThickness="1.7" StrokeStartLineCap="Round"
            StrokeEndLineCap="Round" StrokeLineJoin="Round"
-           Data="M4,4 L10,4 L10,10 L4,10 Z M14,4 L20,4 L20,10 L14,10 Z M4,14 L10,14 L10,20 L4,20 Z M14,14 L20,14 L20,20 L14,20 Z"/>
+           Data="M4,4 L10,4 L10,10 L4,10 Z M14,4 L20,4 L20,10 L14,10 Z M4,14 L10,14 L10,20 L4,20 Z M14,14 L20,14 L20,20 L14,20 Z">
+           <Path.Effect>
+            <DropShadowEffect Color="#A7D9F5" BlurRadius="4"
+             ShadowDepth="0" Opacity=".22"/>
+           </Path.Effect>
+          </Path>
+         </Border>
          <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
            Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            Text="Layout"/>
@@ -242,11 +405,19 @@
        <Button x:Name="NavDesign" Style="{StaticResource NavButton}"
         Click="NavClicked" Tag="Design">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-         <Path Width="20" Height="20" Stretch="Uniform"
+         <Border Style="{StaticResource GlassNavIcon}">
+          <Path Width="19" Height="19" Stretch="Uniform"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
            Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            StrokeThickness="1.7" StrokeStartLineCap="Round"
            StrokeEndLineCap="Round" StrokeLineJoin="Round"
-           Data="M12,2 L14.6,9.4 L22,12 L14.6,14.6 L12,22 L9.4,14.6 L2,12 L9.4,9.4 Z"/>
+           Data="M12,2 L14.6,9.4 L22,12 L14.6,14.6 L12,22 L9.4,14.6 L2,12 L9.4,9.4 Z">
+           <Path.Effect>
+            <DropShadowEffect Color="#A7D9F5" BlurRadius="4"
+             ShadowDepth="0" Opacity=".22"/>
+           </Path.Effect>
+          </Path>
+         </Border>
          <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
            Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            Text="Animation &amp; Design"/>
@@ -255,11 +426,19 @@
        <Button x:Name="NavKeys" Style="{StaticResource NavButton}"
         Click="NavClicked" Tag="Keys">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-         <Path Width="20" Height="20" Stretch="Uniform"
+         <Border Style="{StaticResource GlassNavIcon}">
+          <Path Width="19" Height="19" Stretch="Uniform"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
            Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            StrokeThickness="1.7" StrokeStartLineCap="Round"
            StrokeEndLineCap="Round" StrokeLineJoin="Round"
-           Data="M3,6 L21,6 L21,18 L3,18 Z M6,10 L7,10 M10,10 L11,10 M14,10 L15,10 M18,10 L19,10 M7,14 L17,14"/>
+           Data="M3,6 L21,6 L21,18 L3,18 Z M6,10 L7,10 M10,10 L11,10 M14,10 L15,10 M18,10 L19,10 M7,14 L17,14">
+           <Path.Effect>
+            <DropShadowEffect Color="#A7D9F5" BlurRadius="4"
+             ShadowDepth="0" Opacity=".22"/>
+           </Path.Effect>
+          </Path>
+         </Border>
          <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
            Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            Text="Tastenkombinationen"/>
@@ -268,11 +447,19 @@
        <Button x:Name="NavApp" Style="{StaticResource NavButton}"
         Click="NavClicked" Tag="App">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-         <Path Width="20" Height="20" Stretch="Uniform"
+         <Border Style="{StaticResource GlassNavIcon}">
+          <Path Width="19" Height="19" Stretch="Uniform"
+           HorizontalAlignment="Center" VerticalAlignment="Center"
            Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            StrokeThickness="1.7" StrokeStartLineCap="Round"
            StrokeEndLineCap="Round" StrokeLineJoin="Round"
-           Data="M12,2 L14,4 L17,3 L18,6 L21,7 L20,10 L22,12 L20,14 L21,17 L18,18 L17,21 L14,20 L12,22 L10,20 L7,21 L6,18 L3,17 L4,14 L2,12 L4,10 L3,7 L6,6 L7,3 L10,4 Z M12,9 A3,3 0 1 1 11.99,9"/>
+           Data="M12,2 L14,4 L17,3 L18,6 L21,7 L20,10 L22,12 L20,14 L21,17 L18,18 L17,21 L14,20 L12,22 L10,20 L7,21 L6,18 L3,17 L4,14 L2,12 L4,10 L3,7 L6,6 L7,3 L10,4 Z M12,9 A3,3 0 1 1 11.99,9">
+           <Path.Effect>
+            <DropShadowEffect Color="#A7D9F5" BlurRadius="4"
+             ShadowDepth="0" Opacity=".22"/>
+           </Path.Effect>
+          </Path>
+         </Border>
          <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
            Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
            Text="Anwendung"/>
@@ -294,7 +481,7 @@
      </ScrollViewer>
     </Grid>
    </Grid>
-   <Border Grid.Row="2" Background="#D91A2833" BorderThickness="0,1,0,0"
+   <Border Grid.Row="2" Background="{DynamicResource GlassFooterSurface}" BorderThickness="0,1,0,0"
     BorderBrush="#3555687B" CornerRadius="0,0,15,15">
     <Grid Margin="21,0,21,0">
      <TextBlock x:Name="StatusText" Text="Bereit" FontSize="11"
