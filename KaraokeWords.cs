@@ -14,7 +14,8 @@ public sealed class KaraokeWords
     private sealed record WordItem(LyricWord Timing,TextBlock Text,ScaleTransform Scale);
     private readonly WrapPanel _panel;
     private readonly List<WordItem> _items=new();
-    private readonly DropShadowEffect _glow=new(){BlurRadius=15,Opacity=.54,ShadowDepth=0};
+    // Restrained glyph-only light; the previous 15px blur formed color blobs.
+    private readonly DropShadowEffect _glow=new(){BlurRadius=7.5,Opacity=.34,ShadowDepth=0};
     // Only the ACTIVE word uses this mutable gradient; the others share frozen brushes.
     private readonly GradientStop _sweepFilled=new(Colors.White,.1);
     private readonly GradientStop _sweepPending=new(Colors.Gray,.15);
@@ -31,7 +32,7 @@ public sealed class KaraokeWords
     public bool HighContrast {get;set;}
     public double GlowStrength {get=>_glowStrength;set{
         _glowStrength=Math.Clamp(value,0,1);
-        _glow.Opacity=_glowStrength;
+        _glow.Opacity=Math.Min(.48,_glowStrength*.73);
     }}
     public int CurrentWordIndex=>_active>=0?_active:-1;
     public bool ReducedMotion {
@@ -164,7 +165,8 @@ public sealed class KaraokeWords
             _sweepFilled.Offset=Math.Clamp(sweep-.045,0,1);
             _sweepPending.Offset=Math.Clamp(sweep+.045,0,1);
         }
-        _glow.Opacity=_glowStrength*(.75+.25*Math.Sin(Math.PI*ratio));
+        _glow.Opacity=Math.Min(.48,
+            _glowStrength*.73*(.75+.25*Math.Sin(Math.PI*ratio)));
         double scale=_reducedMotion?1: (timed?
             1.03+.04*Math.Sin(Math.PI*Math.Pow(ratio,.75)):1.045);
         if(Math.Abs(scale-_lastScale)>.003) {

@@ -37,6 +37,17 @@
       <Grid.Effect>
        <DropShadowEffect Color="#FF030308" BlurRadius="7" ShadowDepth="2" Opacity="0.88"/>
       </Grid.Effect>
+     <!-- Plain lyrics are displayed as a calm, automatic reader, not manually
+          paged or falsely synchronized to words. -->
+     <ScrollViewer x:Name="PlainLyricsReader" Height="204"
+       VerticalScrollBarVisibility="Hidden"
+       HorizontalScrollBarVisibility="Disabled"
+       IsHitTestVisible="False" Visibility="Collapsed">
+      <TextBlock x:Name="PlainLyricsText" Text="" FontSize="22"
+        FontFamily="Segoe UI Variable Display,Segoe UI"
+        FontWeight="Medium" TextWrapping="Wrap"
+        Foreground="#FFF2F6FC" Margin="0,0,8,0"/>
+     </ScrollViewer>
      <TextBlock x:Name="ActiveLyric" Text=""
        Foreground="#FFFFF5EC" FontFamily="Segoe UI Variable Display,Segoe UI"
        FontSize="45" FontWeight="ExtraBold"

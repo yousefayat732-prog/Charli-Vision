@@ -9,6 +9,11 @@
   <SolidColorBrush x:Key="GlassAccent" Color="#FF39DDE6"/>
   <SolidColorBrush x:Key="GlassAccentSoft" Color="#5539DDE6"/>
   <SolidColorBrush x:Key="GlassLine" Color="#7739DDE6"/>
+  <SolidColorBrush x:Key="GlassIcon" Color="#FFE5F4FB"/>
+  <SolidColorBrush x:Key="GlassIconSoft" Color="#2249C8CE"/>
+  <SolidColorBrush x:Key="GlassTextPrimary" Color="#FFF2F9FA"/>
+  <SolidColorBrush x:Key="GlassTextSecondary" Color="#FFB8CFD1"/>
+  <SolidColorBrush x:Key="GlassTintBrush" Color="#D218252C"/>
   <Style x:Key="MenuRow" TargetType="Button">
    <Setter Property="Height" Value="27"/>
    <Setter Property="Margin" Value="0,0.5"/>
@@ -16,7 +21,7 @@
    <Setter Property="BorderThickness" Value="1"/>
    <Setter Property="BorderBrush" Value="Transparent"/>
    <Setter Property="Background" Value="#17070F13"/>
-   <Setter Property="Foreground" Value="#FFEBF6F7"/>
+   <Setter Property="Foreground" Value="{DynamicResource GlassTextPrimary}"/>
    <Setter Property="Cursor" Value="Hand"/>
    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
    <Setter Property="Template">
@@ -35,7 +40,7 @@
         <Setter TargetName="Cell" Property="Background" Value="{DynamicResource GlassAccentSoft}"/>
        </Trigger>
        <Trigger Property="IsPressed" Value="True">
-        <Setter TargetName="Cell" Property="Background" Value="#7843D9DF"/>
+        <Setter TargetName="Cell" Property="Background" Value="{DynamicResource GlassAccentSoft}"/>
        </Trigger>
        <Trigger Property="IsKeyboardFocused" Value="True">
         <Setter TargetName="Cell" Property="BorderBrush" Value="#EEFFFFFF"/>
@@ -88,13 +93,13 @@
       <StackPanel Grid.Column="1" VerticalAlignment="Center">
        <TextBlock Text="CHARLI VISION" FontSize="19.5"
         FontWeight="Black" FontFamily="Segoe UI Variable Display,Segoe UI"
-        Foreground="#FFF5FEFF"/>
+        Foreground="{DynamicResource GlassTextPrimary}"/>
        <TextBlock Text="Musik · Lyrics · Visualizer"
         FontFamily="Segoe UI Variable Text,Segoe UI"
-        Foreground="#FF92E6E9" FontSize="11"/>
+        Foreground="{DynamicResource GlassTextSecondary}" FontSize="11"/>
       </StackPanel>
       <Button Grid.Column="2" Content="×" ToolTip="Schließen"
-        Click="CloseClicked" Foreground="#FFDFF7FA" Background="Transparent"
+        Click="CloseClicked" Foreground="{DynamicResource GlassIcon}" Background="Transparent"
         BorderThickness="0" FontSize="23" Cursor="Hand"/>
       <Path Grid.ColumnSpan="3" VerticalAlignment="Bottom" Margin="0,0,0,1"
         Stroke="{DynamicResource GlassLine}" StrokeThickness=".7"

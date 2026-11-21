@@ -62,6 +62,9 @@ public sealed class VinylVisual : FrameworkElement
         set {if(_centerTransparent!=value){_centerTransparent=value;InvalidateVisual();}}
     }
     public bool RotationEnabled {get;set;}=true;
+    // Uses the standard 33⅓ RPM unless the optional local tempo estimator
+    // has accumulated enough stable, real audio onsets.
+    public double TargetRotationRpm {get;set;}=33.333;
     public double SmoothingFactor {get;set;}=1;
     public bool CachedMaterialFrozen=>_grooves.IsFrozen && _grooveTexture?.IsFrozen==true;
     public double RotationDegrees=>_angle;
@@ -203,6 +206,16 @@ public sealed class VinylVisual : FrameworkElement
         _target=palette;_paletteFade=0;_lastPaletteStep=-1;
         InvalidateVisual();
     }
+    // Called only by the centralized ChromaticDesignEngine. The vinyl no
+    // longer runs a second, competing album-color interpolation clock.
+    public void SetPaletteImmediate(AlbumPalette palette)
+    {
+        if(_current.Equals(palette))return;
+        _from=palette;_target=palette;_current=palette;
+        _paletteFade=1;_lastPaletteStep=PaletteSteps;
+        UpdateResources(palette);
+        InvalidateVisual();
+    }
     private static BitmapSource? RasterizeCover(BitmapSource? art)
     {
         if(art is null)return null;
@@ -244,8 +257,13 @@ public sealed class VinylVisual : FrameworkElement
         // Unlike the old 240-ms dt clamp, missed frames never cause lost
         // physical rotation. Analytic integration also avoids frame-size drift.
         dt=double.IsFinite(dt)?Math.Max(0,dt):0;
-        double targetSpeed=_playing&&RotationEnabled?200:0; // 33 1/3 RPM
-        double speedTau=_playing?.36:.48;
+        double safeRpm=double.IsFinite(TargetRotationRpm)?
+            Math.Clamp(TargetRotationRpm,24,52):33.333;
+        double targetSpeed=_playing&&RotationEnabled?safeRpm*6:0;
+        // A reliable tempo change eases over ~2.6s; the classic 33⅓ RPM
+        // remains fast to start and preserves analytic frame independence.
+        double speedTau=_playing?
+            (Math.Abs(safeRpm-33.333)>.05?2.6:.36):.48;
         double speedBefore=_speed;
         double attenuation=Math.Exp(-dt/speedTau);
         _speed=targetSpeed+(speedBefore-targetSpeed)*attenuation;

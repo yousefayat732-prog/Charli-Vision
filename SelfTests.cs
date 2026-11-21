@@ -770,8 +770,10 @@ public static class SelfTests
                 System.Reflection.BindingFlags.Instance|
                 System.Reflection.BindingFlags.NonPublic)?.Invoke(host,null);
             return host.TitleRegion.Visibility==System.Windows.Visibility.Visible&&
-                host.PreviousLyric.Text.Contains("VERSION UNGEPRÜFT")&&
-                host.ActiveLyric.Text.Contains("A sample original verse");
+                host.PlainLyricsReader.Visibility==System.Windows.Visibility.Visible&&
+                host.PlainLyricsText.Text.Contains("A sample original verse")&&
+                host.PreviousLyric.Text=="";
+
         });
         Check("Universal: large duration mismatch is rejected even as plain",()=>{
             var stub=new StubLyricsHttp((req,ct)=>{
@@ -973,6 +975,97 @@ public static class SelfTests
                 red.Accent.R>red.Accent.B &&
                 blue.Accent.B>blue.Accent.R &&
                 red.Highlight!=blue.Highlight;
+        });
+        Check("Chromatic V3: one transition emits at most 25 shared updates",()=>{
+            var engine=new ChromaticDesignEngine();
+            int count=0;
+            var red=AlbumPalette.Analyze(Sample(244,44,59));
+            engine.Changed+=tokens=>{
+                count++;
+                if(tokens.TextPrimary.A!=255)
+                    throw new Exception("Text alpha changed");
+            };
+            engine.SetTarget(red);
+            for(int i=0;i<110;i++)engine.Tick(.009);
+            return count>=20 && count<=25 && !engine.Transitioning &&
+                engine.Tokens.Palette.Equals(red) &&
+                engine.UpdatesEmitted==count;
+        });
+        Check("Chromatic V3: red-blue change is shared and interruptible",()=>{
+            var engine=new ChromaticDesignEngine();
+            var red=AlbumPalette.Analyze(Sample(239,49,61));
+            var blue=AlbumPalette.Analyze(Sample(42,83,238));
+            engine.SetTarget(red);
+            engine.Tick(.32);
+            var middle=engine.Tokens.Palette;
+            engine.SetTarget(blue);
+            engine.Tick(.36);
+            var blend=engine.Tokens.Palette;
+            engine.Tick(.5);
+            return !middle.Equals(red)&&!blend.Equals(blue) &&
+                engine.Tokens.Palette.Equals(blue);
+        });
+        Check("Chromatic V3: readable tokens for dark, red and blue albums",()=>{
+            var palettes=new[]{
+                AlbumPalette.Neutral,
+                AlbumPalette.Analyze(Sample(32,25,39)),
+                AlbumPalette.Analyze(Sample(237,40,64)),
+                AlbumPalette.Analyze(Sample(33,68,247))
+            };
+            var canvas=System.Windows.Media.Color.FromRgb(18,29,39);
+            return palettes.All(p=>{
+                var t=ChromaticTokens.From(p);
+                return ChromaticTokens.Contrast(t.TextPrimary,canvas)>=7 &&
+                    ChromaticTokens.Contrast(t.TextSecondary,canvas)>=4.5 &&
+                    ChromaticTokens.Contrast(t.TextActive,canvas)>=4.5 &&
+                    ChromaticTokens.Contrast(t.Icon,canvas)>=5;
+            });
+        });
+        Check("Chromatic V3: reduced motion finishes transition immediately",()=>{
+            var engine=new ChromaticDesignEngine();
+            var blue=AlbumPalette.Analyze(Sample(33,83,244));
+            engine.SetTarget(blue);
+            engine.Tick(.016,true);
+            return !engine.Transitioning &&
+                engine.Tokens.Palette.Equals(blue);
+        });
+        Check("Music-adaptive vinyl: real periodic bass gives plausible BPM",()=>{
+            var tempo=new MusicTempoEstimator();
+            var levels=new float[92];
+            for(int i=0;i<660;i++){
+                float bass=i%25==0?.91f:.06f;
+                for(int band=0;band<12;band++)levels[band]=bass;
+                tempo.Observe(i*.02,levels);
+            }
+            return tempo.EstimatedBpm is double bpm &&
+                Math.Abs(bpm-120)<1 && tempo.Confidence>.9 &&
+                MusicTempoEstimator.TargetRpm(bpm)>33.333;
+        });
+        Check("Music-adaptive vinyl: irregular pulses never invent stable BPM",()=>{
+            var tempo=new MusicTempoEstimator();
+            var levels=new float[92];
+            double time=0;
+            foreach(double delay in new[]{.36,.94,.41,.72,1.05,.38,.78,.43,.89,.36,.95,.48}){
+                time+=delay;
+                for(int band=0;band<12;band++)levels[band]=.04f;
+                tempo.Observe(time-.015,levels);
+                for(int band=0;band<12;band++)levels[band]=.91f;
+                tempo.Observe(time,levels);
+            }
+            return tempo.EstimatedBpm is null &&
+                Math.Abs(MusicTempoEstimator.TargetRpm(null)-33.333)<.001;
+        });
+        Check("Music-adaptive vinyl: new target glides without angular jumps",()=>{
+            var disc=new VinylVisual();
+            disc.SetTrack(true,null,false);
+            disc.Tick(2,null);
+            double before=disc.RotationDegrees;
+            disc.TargetRotationRpm=46;
+            disc.Tick(.02,null);
+            double delta=(disc.RotationDegrees-before+360)%360;
+            disc.Tick(3,null);
+            return delta>2 && delta<7 &&
+                disc.RotationSpeed>202 && disc.RotationSpeed<276;
         });
         Check("Updater: strict version checks and no automatic installation",()=>{
             return VisionUpdateService.IsNewer("1.0.0","1.0.1") &&
@@ -1212,8 +1305,10 @@ public static class SelfTests
                 System.Reflection.BindingFlags.NonPublic);
             display?.Invoke(host,null);
             return host.TitleRegion.Visibility==System.Windows.Visibility.Visible &&
-                host.ActiveLyric.Text.Contains("A sample line") &&
-                host.PreviousLyric.Text.Contains("OHNE ZEITMARKEN");
+                host.PlainLyricsReader.Visibility==System.Windows.Visibility.Visible &&
+                host.PlainLyricsText.Text.Contains("A sample line") &&
+                host.PreviousLyric.Text=="" && host.NextLyric.Text=="";
+
         });
         Check("Repair: closing the glass menu twice is safe",()=>{
             var host=new MainWindow();

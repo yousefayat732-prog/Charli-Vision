@@ -11,12 +11,16 @@
   <SolidColorBrush x:Key="SurfaceBrush" Color="#E817202B"/>
   <SolidColorBrush x:Key="BorderBrushCustom" Color="#566E889A"/>
   <SolidColorBrush x:Key="TextMuted" Color="#FFAAB9CA"/>
+  <SolidColorBrush x:Key="TextPrimary" Color="#FFF1F6FC"/>
+  <SolidColorBrush x:Key="TextSecondary" Color="#FFAFBFCC"/>
+  <SolidColorBrush x:Key="IconBrush" Color="#FFE4F0FF"/>
+  <SolidColorBrush x:Key="GlassSurfaceTint" Color="#F0101923"/>
   <Style TargetType="TextBlock">
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
-   <Setter Property="Foreground" Value="#FFF1F6FC"/>
+   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
   </Style>
   <Style x:Key="NavButton" TargetType="Button">
-   <Setter Property="Foreground" Value="#FFE3EAF2"/>
+   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
    <Setter Property="FontSize" Value="14"/>
    <Setter Property="FontWeight" Value="SemiBold"/>
@@ -48,7 +52,7 @@
   </Style>
   <Style x:Key="ActionButton" TargetType="Button">
    <Setter Property="Background" Value="#FF243645"/>
-   <Setter Property="Foreground" Value="#FFEEF6FB"/>
+   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
    <Setter Property="BorderBrush" Value="#587A92A6"/>
    <Setter Property="BorderThickness" Value="1"/>
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
@@ -84,7 +88,7 @@
    </Setter>
   </Style>
   <Style x:Key="AppToggle" TargetType="CheckBox">
-   <Setter Property="Foreground" Value="#FFEEF5FA"/>
+   <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
    <Setter Property="FontSize" Value="14"/>
    <Setter Property="FontFamily" Value="Segoe UI Variable Text,Segoe UI"/>
    <Setter Property="Margin" Value="0,7,0,7"/>
@@ -120,8 +124,15 @@
    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
   </Style>
  </Window.Resources>
+ <Grid>
+  <Image x:Name="GlassBackdrop" Margin="7" Opacity=".62"
+    Stretch="Fill" IsHitTestVisible="False" SnapsToDevicePixels="True">
+   <Image.Effect>
+    <BlurEffect Radius="17" RenderingBias="Performance"/>
+   </Image.Effect>
+  </Image>
  <Border BorderThickness="1" BorderBrush="{DynamicResource BorderBrushCustom}"
-         CornerRadius="17" Background="#FA101923" Margin="7">
+         CornerRadius="17" Background="{DynamicResource GlassSurfaceTint}" Margin="7">
   <Border.Effect>
    <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="5" Opacity=".47"/>
   </Border.Effect>
@@ -151,10 +162,19 @@
       <TextBlock Text="●  LIVE ALBUM COLORS" FontSize="10" FontWeight="SemiBold"
        Foreground="{DynamicResource AccentBrush}" Margin="0,0,20,0"
        VerticalAlignment="Center"/>
-      <Button Content="—" Style="{StaticResource ActionButton}" Click="MinimizeClick"
-        Width="40" Padding="9,6" ToolTip="Minimieren"/>
-      <Button Content="×" Style="{StaticResource ActionButton}" Click="CloseClick"
-        Width="40" Padding="9,6" FontSize="19" ToolTip="Schließen"/>
+      <Button Style="{StaticResource ActionButton}" Click="MinimizeClick"
+        Width="40" Padding="9,6" ToolTip="Minimieren">
+       <Path Data="M5,12 L19,12" Width="18" Height="18" Stretch="Uniform"
+         Stroke="{DynamicResource IconBrush}" StrokeThickness="1.8"
+         StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+      </Button>
+      <Button Style="{StaticResource ActionButton}" Click="CloseClick"
+        Width="40" Padding="9,6" ToolTip="Schließen">
+       <Path Data="M5,5 L19,19 M19,5 L5,19" Width="18" Height="18"
+         Stretch="Uniform" Stroke="{DynamicResource IconBrush}"
+         StrokeThickness="1.8" StrokeStartLineCap="Round"
+         StrokeEndLineCap="Round"/>
+      </Button>
      </StackPanel>
     </Grid>
    </Border>
@@ -180,18 +200,84 @@
       <StackPanel Margin="8,22,8,6">
        <TextBlock Text="KATEGORIEN" Foreground="{DynamicResource TextMuted}"
         FontSize="10" FontWeight="Bold" Margin="19,0,0,14"/>
-       <Button x:Name="NavPlayback" Content="♫   Wiedergabe" Style="{StaticResource NavButton}"
-        Click="NavClicked" Tag="Playback"/>
-       <Button x:Name="NavLyrics" Content="≋   Lyrics &amp; Sync" Style="{StaticResource NavButton}"
-        Click="NavClicked" Tag="Lyrics"/>
-       <Button x:Name="NavLayout" Content="▦   Layout" Style="{StaticResource NavButton}"
-        Click="NavClicked" Tag="Layout"/>
-       <Button x:Name="NavDesign" Content="✦   Animation &amp; Design" Style="{StaticResource NavButton}"
-        Click="NavClicked" Tag="Design"/>
-       <Button x:Name="NavKeys" Content="⌨   Tastenkombinationen" Style="{StaticResource NavButton}"
-        Click="NavClicked" Tag="Keys"/>
-       <Button x:Name="NavApp" Content="⚙   Anwendung" Style="{StaticResource NavButton}"
-        Click="NavClicked" Tag="App"/>
+       <Button x:Name="NavPlayback" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Playback">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+         <Path Width="20" Height="20" Stretch="Uniform"
+           Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           StrokeThickness="1.7" StrokeStartLineCap="Round"
+           StrokeEndLineCap="Round" StrokeLineJoin="Round"
+           Data="M9,5 L19,12 L9,19 Z"/>
+         <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
+           Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           Text="Wiedergabe"/>
+        </StackPanel>
+       </Button>
+       <Button x:Name="NavLyrics" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Lyrics">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+         <Path Width="20" Height="20" Stretch="Uniform"
+           Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           StrokeThickness="1.7" StrokeStartLineCap="Round"
+           StrokeEndLineCap="Round" StrokeLineJoin="Round"
+           Data="M7,18 V6 L19,4 V16 M7,6 L19,4 M7,18 C7,20 3,20 3,18 C3,16 7,16 7,18 M19,16 C19,18 15,18 15,16 C15,14 19,14 19,16"/>
+         <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
+           Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           Text="Lyrics &amp; Sync"/>
+        </StackPanel>
+       </Button>
+       <Button x:Name="NavLayout" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Layout">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+         <Path Width="20" Height="20" Stretch="Uniform"
+           Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           StrokeThickness="1.7" StrokeStartLineCap="Round"
+           StrokeEndLineCap="Round" StrokeLineJoin="Round"
+           Data="M4,4 L10,4 L10,10 L4,10 Z M14,4 L20,4 L20,10 L14,10 Z M4,14 L10,14 L10,20 L4,20 Z M14,14 L20,14 L20,20 L14,20 Z"/>
+         <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
+           Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           Text="Layout"/>
+        </StackPanel>
+       </Button>
+       <Button x:Name="NavDesign" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Design">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+         <Path Width="20" Height="20" Stretch="Uniform"
+           Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           StrokeThickness="1.7" StrokeStartLineCap="Round"
+           StrokeEndLineCap="Round" StrokeLineJoin="Round"
+           Data="M12,2 L14.6,9.4 L22,12 L14.6,14.6 L12,22 L9.4,14.6 L2,12 L9.4,9.4 Z"/>
+         <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
+           Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           Text="Animation &amp; Design"/>
+        </StackPanel>
+       </Button>
+       <Button x:Name="NavKeys" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="Keys">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+         <Path Width="20" Height="20" Stretch="Uniform"
+           Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           StrokeThickness="1.7" StrokeStartLineCap="Round"
+           StrokeEndLineCap="Round" StrokeLineJoin="Round"
+           Data="M3,6 L21,6 L21,18 L3,18 Z M6,10 L7,10 M10,10 L11,10 M14,10 L15,10 M18,10 L19,10 M7,14 L17,14"/>
+         <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
+           Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           Text="Tastenkombinationen"/>
+        </StackPanel>
+       </Button>
+       <Button x:Name="NavApp" Style="{StaticResource NavButton}"
+        Click="NavClicked" Tag="App">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+         <Path Width="20" Height="20" Stretch="Uniform"
+           Stroke="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           StrokeThickness="1.7" StrokeStartLineCap="Round"
+           StrokeEndLineCap="Round" StrokeLineJoin="Round"
+           Data="M12,2 L14,4 L17,3 L18,6 L21,7 L20,10 L22,12 L20,14 L21,17 L18,18 L17,21 L14,20 L12,22 L10,20 L7,21 L6,18 L3,17 L4,14 L2,12 L4,10 L3,7 L6,6 L7,3 L10,4 Z M12,9 A3,3 0 1 1 11.99,9"/>
+         <TextBlock Margin="13,0,0,0" VerticalAlignment="Center"
+           Foreground="{Binding Foreground,RelativeSource={RelativeSource AncestorType=Button}}"
+           Text="Anwendung"/>
+        </StackPanel>
+       </Button>
       </StackPanel>
      </DockPanel>
     </Border>
@@ -202,7 +288,7 @@
       <TextBlock x:Name="SectionDescription" FontSize="12" Foreground="{DynamicResource TextMuted}"
        Margin="0,5,0,0" Text="Musiksteuerelemente und Aktionen"/>
      </StackPanel>
-     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+     <ScrollViewer x:Name="SettingsScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto"
        HorizontalScrollBarVisibility="Disabled" CanContentScroll="True">
       <StackPanel x:Name="SettingsContent" Margin="0,3,9,12"/>
      </ScrollViewer>
@@ -220,4 +306,5 @@
    </Border>
   </Grid>
  </Border>
+ </Grid>
 </Window>

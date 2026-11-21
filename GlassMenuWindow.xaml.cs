@@ -25,8 +25,10 @@ public partial class GlassMenuWindow : Window
     private readonly MainWindow _host;
     private readonly AppSettings _settings;
     private readonly HotkeyManager _keys;
-    private readonly DispatcherTimer _colors=new(){Interval=TimeSpan.FromMilliseconds(65)};
-    private MediaColor _lastAccent=Colors.Transparent;
+    private readonly SmoothScrollController _scroll;
+    private ChromaticTokens _lastTokens;
+    private bool _hasTokens;
+    private byte _backdropTintAlpha=101;
     private string _syncScope="Song";
     private bool _closing;
     private bool _building;
@@ -35,6 +37,7 @@ public partial class GlassMenuWindow : Window
     {
         InitializeComponent();
         _host=host;_settings=settings;_keys=hotkeys;
+        _scroll=new SmoothScrollController(MenuScroller,()=>_settings.ReducedMotion);
         var screen=WinForms.Screen.FromPoint(new System.Drawing.Point(
             (int)screenAt.X,(int)screenAt.Y));
         var area=screen.WorkingArea;
@@ -51,10 +54,15 @@ public partial class GlassMenuWindow : Window
         Flyout.CustomPopupPlacementCallback=PlaceFlyout;
         OuterShell.SizeChanged+=(_,e)=>UpdateCornerClip(e.NewSize);
         SourceInitialized+=(_,_)=>CaptureBlurredBackdrop();
-        _colors.Tick+=(_,_)=>UpdateColors();
-        Loaded+=(_,_)=>{Rebuild();UpdateColors(true);_colors.Start();};
+        _host.ChromaticPaletteChanged+=OnChromaticPaletteChanged;
+        Loaded+=(_,_)=>{Rebuild();UpdateColors(true);};
         Closing+=(_,_)=>{_closing=true;Flyout.IsOpen=false;};
-        Closed+=(_,_)=>{_closing=true;_colors.Stop();Flyout.IsOpen=false;};
+        Closed+=(_,_)=>{
+            _closing=true;
+            _host.ChromaticPaletteChanged-=OnChromaticPaletteChanged;
+            _scroll.Dispose();
+            Flyout.IsOpen=false;
+        };
         Deactivated+=(_,_)=>{
             // WPF can raise Deactivated while Close() is already in progress.
             // Defer closing and recheck the state to avoid reentrant Window.Close.
@@ -76,19 +84,25 @@ public partial class GlassMenuWindow : Window
         if(WindowState==WindowState.Minimized)WindowState=WindowState.Normal;
         Show();Activate();
     }
+    private void OnChromaticPaletteChanged(ChromaticTokens _) => UpdateColors();
     private void UpdateColors(bool force=false)
     {
-        var p=_settings.AlbumColorsEnabled?_host.ActivePalette:AlbumPalette.Neutral;
-        MediaColor accent=p.Accent;
-        if(!force && Math.Abs(accent.R-_lastAccent.R)+
-           Math.Abs(accent.G-_lastAccent.G)+Math.Abs(accent.B-_lastAccent.B)<5)
-            return;
-        _lastAccent=accent;
-        Resources["GlassAccent"]=new SolidColorBrush(accent);
-        Resources["GlassAccentSoft"]=new SolidColorBrush(
-            MediaColor.FromArgb(81,accent.R,accent.G,accent.B));
-        Resources["GlassLine"]=new SolidColorBrush(
-            MediaColor.FromArgb(130,accent.R,accent.G,accent.B));
+        var tokens=_host.DesignTokens;
+        MediaColor accent=tokens.Accent;
+        if(!force && _hasTokens && _lastTokens.Equals(tokens))return;
+        _lastTokens=tokens;
+        _hasTokens=true;
+        Resources["GlassAccent"]=new SolidColorBrush(tokens.TextActive);
+        Resources["GlassAccentSoft"]=new SolidColorBrush(tokens.HoverSurface);
+        Resources["GlassLine"]=new SolidColorBrush(tokens.GlassBorder);
+        Resources["GlassIcon"]=new SolidColorBrush(tokens.Icon);
+        Resources["GlassIconSoft"]=new SolidColorBrush(tokens.HoverSurface);
+        Resources["GlassTextPrimary"]=new SolidColorBrush(tokens.TextPrimary);
+        Resources["GlassTextSecondary"]=new SolidColorBrush(tokens.TextSecondary);
+        Resources["GlassTintBrush"]=new SolidColorBrush(tokens.GlassSurface);
+        GlassTint.Background=new SolidColorBrush(MediaColor.FromArgb(
+            _backdropTintAlpha,tokens.GlassSurface.R,
+            tokens.GlassSurface.G,tokens.GlassSurface.B));
         if(OuterShell.Effect is System.Windows.Media.Effects.DropShadowEffect glow)
             glow.Color=accent;
         if(FlyoutShell.Effect is System.Windows.Media.Effects.DropShadowEffect popupGlow)
@@ -126,9 +140,8 @@ public partial class GlassMenuWindow : Window
                 luminance+=.2126*px.R+.7152*px.G+.0722*px.B;
                 samples++;
             }
-            byte tint=(byte)(luminance/samples>145?159:101);
-            GlassTint.Background=new SolidColorBrush(
-                MediaColor.FromArgb(tint,10,34,37));
+            _backdropTintAlpha=(byte)(luminance/samples>145?159:101);
+            UpdateColors(true);
             IntPtr handle=bmp.GetHbitmap();
             try{
                 var source=Imaging.CreateBitmapSourceFromHBitmap(handle,IntPtr.Zero,
@@ -160,14 +173,16 @@ public partial class GlassMenuWindow : Window
             new MediaPoint(x,y),
             PopupPrimaryAxis.Horizontal)};
     }
-    private static TextBlock Text(string content,int size=13,bool bold=false)
+    private TextBlock Text(string content,int size=13,bool bold=false)
     {
-        return new TextBlock{
+        var block=new TextBlock{
             Text=content,FontSize=size,FontFamily=new System.Windows.Media.FontFamily("Segoe UI Variable Text,Segoe UI"),
             FontWeight=bold?FontWeights.SemiBold:FontWeights.Normal,
-            Foreground=new SolidColorBrush(MediaColor.FromRgb(235,247,249)),
             VerticalAlignment=VerticalAlignment.Center,TextTrimming=TextTrimming.CharacterEllipsis
         };
+        block.SetResourceReference(TextBlock.ForegroundProperty,
+            size<=11?"GlassTextSecondary":"GlassTextPrimary");
+        return block;
     }
     private void Section(string icon,string label)
     {
@@ -198,14 +213,16 @@ public partial class GlassMenuWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
         grid.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         var iconShell=new Border {
-            Width=27,Height=23,CornerRadius=new CornerRadius(7),
-            Background=new SolidColorBrush(MediaColor.FromArgb(42,160,210,215))
+            Width=27,Height=23,CornerRadius=new CornerRadius(7)
         };
-        iconShell.Child=new TextBlock{
+        iconShell.SetResourceReference(Border.BackgroundProperty,"GlassIconSoft");
+        var iconText=new TextBlock{
             Text=glyph,FontFamily=new System.Windows.Media.FontFamily("Segoe MDL2 Assets,Segoe UI Symbol"),
-            FontSize=16,Foreground=new SolidColorBrush(MediaColor.FromRgb(213,246,248)),
-            TextAlignment=TextAlignment.Center,VerticalAlignment=VerticalAlignment.Center
+            FontSize=16,TextAlignment=TextAlignment.Center,
+            VerticalAlignment=VerticalAlignment.Center
         };
+        iconText.SetResourceReference(TextBlock.ForegroundProperty,"GlassIcon");
+        iconShell.Child=iconText;
         grid.Children.Add(iconShell);
         var title=Text(caption,13);
         title.Margin=new Thickness(4,0,7,0);Grid.SetColumn(title,1);
@@ -291,7 +308,7 @@ public partial class GlassMenuWindow : Window
         };
         panel.Children.Add(btn);
     }
-    private static void FlyoutInfo(StackPanel panel,string title,string detail)
+    private void FlyoutInfo(StackPanel panel,string title,string detail)
     {
         var row=new DockPanel{Margin=new Thickness(8,5,8,5)};
         var right=Text(detail,10);right.Opacity=.75;
@@ -361,10 +378,8 @@ public partial class GlassMenuWindow : Window
                 FlyoutHeader(p,"LYRICS · QUELLEN","Automatisch, nur erlaubte Schnittstellen");
                 FlyoutInfo(p,"LRCLIB","Word / Line");
                 FlyoutInfo(p,"lyrics.ovh","Nur Lesetext");
-                if(_host.HasPlainLyrics){
-                    FlyoutAction(p,"Vorherige Textseite","←",()=>_host.NavigatePlainLyrics(-1));
-                    FlyoutAction(p,"Nächste Textseite","→",()=>_host.NavigatePlainLyrics(1));
-                }
+                if(_host.HasPlainLyrics)
+                    FlyoutInfo(p,"Lesetext","Automatische ruhige Leseführung, keine Zeitmarken");
                 FlyoutAction(p,"Erneut suchen","↻",()=>{
                     Flyout.IsOpen=false;_host.RescanLyrics();
                 });

@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private readonly AppSettings _settings = SettingsStore.Load();
     private readonly MediaController _media = new();
     private readonly AudioEngine _audio = new();
+    private readonly MusicTempoEstimator _tempo=new();
     private readonly DesktopLayer _desktop;
     private readonly LyricsService _lyricsService = new();
     private readonly KaraokeWords _karaoke;
@@ -39,9 +40,14 @@ public partial class MainWindow : Window
     private TrackState? _lastTrack;
     private LyricResult _lyricResult=LyricResult.Unavailable("Noch keine Suche");
     private string _plainLyrics="";
-    private int _plainPage;
+    private double _plainReaderElapsed,_plainScrollPrevious;
     private int _activeLyricIndex = -100;
     private AlbumPalette _appliedPalette = AlbumPalette.Default;
+    private readonly ChromaticDesignEngine _chromatic=new();
+    private bool _chromaticSubscribed;
+    private double _chromaticLastTime;
+    internal ChromaticTokens DesignTokens=>_chromatic.Tokens;
+    internal event Action<ChromaticTokens>? ChromaticPaletteChanged;
     private readonly DispatcherTimer _mediaTimer = new() { Interval = TimeSpan.FromMilliseconds(280) };
     // WPF compositor cadence replaces independent 16ms DispatcherTimer.
     // Only frame updates are throttled; MediaController polling remains separate.
@@ -76,6 +82,8 @@ public partial class MainWindow : Window
         Vinyl.CoverRotates=_settings.CoverRotates;
         _deviceKey=LyricsSyncSettings.DeviceKey();
         _karaoke=new KaraokeWords(WordLyricPanel);
+        _chromatic.Changed+=OnChromaticChanged;
+        _chromatic.SetTarget(AlbumPalette.Neutral,immediate:true);
         _karaoke.ReducedMotion=_settings.ReducedMotion;
         _karaoke.HighContrast=_settings.HighContrastLyrics;
         _lastHighContrast=_settings.HighContrastLyrics;
@@ -179,6 +187,7 @@ public partial class MainWindow : Window
         _displayKey=identity;
         if(changed){
             _trackDetectedStamp=Stopwatch.GetTimestamp();
+            _tempo.Reset();Vinyl.TargetRotationRpm=33.333;
             _songKey=LyricsSyncSettings.SongKey(state.Title,state.Artist,state.Album,state.Duration);
         }
         _playing=state.Playing;
@@ -196,7 +205,7 @@ public partial class MainWindow : Window
         _lines=Array.Empty<LyricLine>();
         _lyricResult=LyricResult.Unavailable(_settings.AutoLyricsSearch?
             "Automatische Suche":"Automatische Suche deaktiviert");
-        _plainLyrics="";_plainPage=0;
+        _plainLyrics="";_plainReaderElapsed=0;
         _activeLyricIndex=-100;
         bool validSong=!state.Title.Equals("CHARLI VISION",StringComparison.OrdinalIgnoreCase);
         ClearLyrics();
@@ -214,7 +223,7 @@ public partial class MainWindow : Window
                 await Task.Run(()=>AlbumPalette.Analyze(art),token);
             if(token.IsCancellationRequested || _closing || _displayKey!=identity)return;
             _lastAlbumPalette=palette;
-            Vinyl.SetPalette(_settings.AlbumColorsEnabled?palette:AlbumPalette.Neutral);
+            SetChromaticTarget(_settings.AlbumColorsEnabled?palette:AlbumPalette.Neutral);
         } catch(OperationCanceledException) {}
           catch(Exception ex) {SettingsStore.Log(ex);}
     }
@@ -228,7 +237,7 @@ public partial class MainWindow : Window
             if(token.IsCancellationRequested||_closing||_displayKey!=identity)return;
             _lyricResult=result;
             _plainLyrics=result.PlainText??"";
-            _plainPage=0;
+            _plainReaderElapsed=0;
             _lines=result.Lines;
             _lastLyricsReadyMs=(Stopwatch.GetTimestamp()-_trackDetectedStamp)*1000d/Stopwatch.Frequency;
             _activeLyricIndex=-100;
@@ -434,7 +443,7 @@ public partial class MainWindow : Window
                 id,track.Title,track.Artist,track.Album,track.Duration,token),token);
             if(chosen is null||_closing||token.IsCancellationRequested||
                 identity!=_displayKey)return;
-            _lyricResult=chosen;_plainLyrics=chosen.PlainText??"";_plainPage=0;
+            _lyricResult=chosen;_plainLyrics=chosen.PlainText??"";_plainReaderElapsed=0;
             _lines=chosen.Lines;_activeLyricIndex=-100;
             ClearLyrics();
             if(chosen.Synchronized)UpdateLyrics();
@@ -448,40 +457,47 @@ public partial class MainWindow : Window
         if(!_settings.PlainLyricsReader||string.IsNullOrWhiteSpace(_plainLyrics)){
             ClearLyrics();return;
         }
-        var lines=_plainLyrics.Replace("\r","").Split('\n',
-            StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
-        if(lines.Length==0){ClearLyrics();return;}
-        int pages=(lines.Length+3)/4;
-        _plainPage=Math.Clamp(_plainPage,0,pages-1);
-        string[] page=lines.Skip(_plainPage*4).Take(4)
-            .Select(x=>x.Length>120?x[..120]:x).ToArray();
+        // A reading-only, automatically scrolling text view, NOT a fabricated
+        // time-alignment algorithm. Playback position never highlights words.
+        var plain=_plainLyrics.Replace("\r","").Trim();
+        if(plain.Length==0){ClearLyrics();return;}
         _karaoke.Clear();
-        PreviousLyric.Text=_lyricResult.Source.Contains("ähnliche",
-            StringComparison.OrdinalIgnoreCase)?
-            "LESETEXT · OHNE ZEITMARKEN · VERSION UNGEPRÜFT":
-            "LESETEXT · OHNE ZEITMARKEN";
-        NextLyric.Text=$"Seite {_plainPage+1} / {pages}  ·  Im Menü weiterblättern";
-        ActiveLyric.Visibility=Visibility.Visible;
-        ActiveLyric.Text=string.Join(Environment.NewLine,page);
-        ActiveLyric.FontSize=page.Any(x=>x.Length>65)?20:24;
-        ActiveLyric.FontWeight=FontWeights.Medium;
-        ActiveLyric.BeginAnimation(OpacityProperty,null);
-        ActiveLyric.Opacity=.94;
-        ActiveLyric.RenderTransform=Transform.Identity;
+        _plainReaderElapsed=0;
+        _plainScrollPrevious=0;
+        PlainLyricsText.Text=plain.Length>16000?plain[..16000]:plain;
+        PlainLyricsReader.ScrollToTop();
+        PlainLyricsReader.Visibility=Visibility.Visible;
+        ActiveLyric.Visibility=Visibility.Collapsed;
+        WordLyricPanel.Visibility=Visibility.Collapsed;
+        PreviousLyric.Text="";
+        NextLyric.Text="";
+        PreviousLyric.Visibility=Visibility.Collapsed;
+        NextLyric.Visibility=Visibility.Collapsed;
         TitleRegion.Visibility=Visibility.Visible;
+    }
+    private void UpdatePlainReader(double dt)
+    {
+        if(PlainLyricsReader.Visibility!=Visibility.Visible||!_playing)return;
+        _plainReaderElapsed+=dt;
+        if(_plainReaderElapsed-_plainScrollPrevious<.06)return;
+        _plainScrollPrevious=_plainReaderElapsed;
+        // Slow constant reading pace; never tied to guessed lyric timestamps.
+        double offset=Math.Min(PlainLyricsReader.ScrollableHeight,
+            _plainReaderElapsed*12);
+        if(Math.Abs(offset-PlainLyricsReader.VerticalOffset)>.3)
+            PlainLyricsReader.ScrollToVerticalOffset(offset);
     }
     internal bool HasPlainLyrics=>_lyricResult.Quality=="Plain" &&
         _settings.PlainLyricsReader && !string.IsNullOrWhiteSpace(_plainLyrics);
-    internal void NavigatePlainLyrics(int delta)=>MovePlainPage(delta);
-    private void MovePlainPage(int delta)
-    {
-        _plainPage+=delta;
-        ShowPlainLyrics();
-    }
     private void ClearLyrics(bool resetIndex=true)
     {
         if(resetIndex)_activeLyricIndex=-100;
         TitleRegion.Visibility=Visibility.Collapsed;
+        PlainLyricsReader.Visibility=Visibility.Collapsed;
+        PlainLyricsText.Text="";
+        _plainReaderElapsed=0;_plainScrollPrevious=0;
+        PreviousLyric.Visibility=Visibility.Visible;
+        NextLyric.Visibility=Visibility.Visible;
         PreviousLyric.Text="";
         ActiveLyric.BeginAnimation(OpacityProperty,null);
         ActiveLyric.Text="";
@@ -587,9 +603,39 @@ public partial class MainWindow : Window
                 _settings.HighContrastLyrics?.88:.64,timeMs*.8);
         }
     }
+    private void SetChromaticTarget(AlbumPalette palette)
+    {
+        _chromatic.SetTarget(palette,_settings.ReducedMotion);
+        if(!_chromatic.Transitioning)return;
+        _chromaticLastTime=_clock.Elapsed.TotalSeconds;
+        if(_chromaticSubscribed)return;
+        // One shared, short-lived compositor subscription for album colors.
+        // This continues even when the desktop overlay is hidden, as long as
+        // one of our WPF windows is visible.
+        CompositionTarget.Rendering+=ChromaticRender;
+        _chromaticSubscribed=true;
+    }
+    private void ChromaticRender(object? sender,EventArgs e)
+    {
+        if(_closing)return;
+        double now=_clock.Elapsed.TotalSeconds;
+        _chromatic.Tick(now-_chromaticLastTime,_settings.ReducedMotion);
+        _chromaticLastTime=now;
+        if(!_chromatic.Transitioning){
+            CompositionTarget.Rendering-=ChromaticRender;
+            _chromaticSubscribed=false;
+        }
+    }
+    private void OnChromaticChanged(ChromaticTokens tokens)
+    {
+        Vinyl.SetPaletteImmediate(tokens.Palette);
+        _forceThemeRefresh=true;
+        ApplyTheme();
+        ChromaticPaletteChanged?.Invoke(tokens);
+    }
     private void ApplyTheme()
     {
-        var palette=Vinyl.CurrentPalette;
+        var palette=_chromatic.Tokens.Palette;
         // Avoid constantly allocating brushes for negligible color changes.
         var a=palette.Accent;
         var prior=_appliedPalette.Accent;
@@ -607,6 +653,7 @@ public partial class MainWindow : Window
         var muted=new SolidColorBrush(quiet);muted.Freeze();
         PreviousLyric.Foreground=muted;
         NextLyric.Foreground=muted;
+        PlainLyricsText.Foreground=primary;
         _karaoke.ApplyTheme(palette);
         _karaoke.GlowStrength=_settings.LyricsGlow;
         if(ActiveLyric.Effect is DropShadowEffect glow){
@@ -662,9 +709,12 @@ public partial class MainWindow : Window
         if(_audio.Available&&_playing){
             _audio.SnapshotInto(_audioFrameLevels);
             levels=_audioFrameLevels;
+            _tempo.Observe(now,_audioFrameLevels);
+            Vinyl.TargetRotationRpm=MusicTempoEstimator.TargetRpm(_tempo.EstimatedBpm);
         }
         Vinyl.Tick(dt,levels);
-        ApplyTheme();
+        if(_forceThemeRefresh)ApplyTheme();
+        UpdatePlainReader(dt);
         UpdateLyrics();
         if (_diagnostics && now-_lastDiagnostic > 2) {
             _lastDiagnostic=now;
@@ -758,10 +808,6 @@ public partial class MainWindow : Window
         AddLyricsAction("Eigene LRC/TXT-Datei importieren",ImportOwnLrc);
         if(_lyricsService.Library.HasImport(_songKey))
             AddLyricsAction("Eigenen Import entfernen",RemoveOwnLrc);
-        if(_lyricResult.Quality=="Plain"&&_settings.PlainLyricsReader){
-            AddLyricsAction("Vorherige vier Textzeilen",()=>MovePlainPage(-1));
-            AddLyricsAction("Nächste vier Textzeilen",()=>MovePlainPage(1));
-        }
         var alternatives=_lyricsService.Alternatives(_songKey);
         if(alternatives.Count>0){
             var options=new MenuItem {
@@ -910,7 +956,7 @@ public partial class MainWindow : Window
         Add("Charli Vision beenden",Close);
         return menu;
     }
-    internal AlbumPalette ActivePalette=>Vinyl.CurrentPalette;
+    internal AlbumPalette ActivePalette=>_chromatic.Tokens.Palette;
     internal string LyricsStatus=>$"{_lyricResult.Source} · {_lyricResult.Quality} · {_lyricResult.Status}";
 
     internal void OpenSettings()
@@ -943,6 +989,8 @@ public partial class MainWindow : Window
     internal void PreviewSettingsSection(string section)=>_settingsWindow?.NavigateTo(section);
     internal void CaptureGlassPreview()=>_glassMenu?.SavePreview(
         Path.Combine(SettingsStore.DirectoryPath,"glass-preview.png"));
+    internal void CaptureSettingsPreview()=>_settingsWindow?.SavePreview(
+        Path.Combine(SettingsStore.DirectoryPath,"chromatic-settings-preview.png"));
     internal void CaptureGlassSyncPreview()=>_glassMenu?.CaptureSyncPreview(
         Path.Combine(SettingsStore.DirectoryPath,"glass-sync-preview.png"));
     internal void ApplyControlSettings()
@@ -973,7 +1021,7 @@ public partial class MainWindow : Window
         TitleRegion.Margin=new Thickness(12+_settings.LyricsSpacing,14,32,14);
         if(_colorModeWasEnabled!=_settings.AlbumColorsEnabled){
             _colorModeWasEnabled=_settings.AlbumColorsEnabled;
-            Vinyl.SetPalette(_settings.AlbumColorsEnabled?_lastAlbumPalette:AlbumPalette.Neutral);
+            SetChromaticTarget(_settings.AlbumColorsEnabled?_lastAlbumPalette:AlbumPalette.Neutral);
         }
         if(ActiveLyric.Effect is DropShadowEffect glow)
             glow.Opacity=_settings.LyricsGlow;
@@ -1185,6 +1233,10 @@ public partial class MainWindow : Window
         _glassMenu?.Close();
         _settingsWindow?.Close();
         _hotkeys?.Dispose();
+        if(_chromaticSubscribed){
+            CompositionTarget.Rendering-=ChromaticRender;
+            _chromaticSubscribed=false;
+        }
         _mediaTimer.Stop(); StopFrameUpdates();_audio.Dispose();
         _media.Dispose();
         _desktop.Dispose();

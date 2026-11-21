@@ -2,9 +2,26 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
+## Neu in v1.1.0 — Chromatic UI & Lyrics-Verbesserungen
+
+Diese Version bildet die **erste getestete Phase von Project Infinity Perfection V3**. Sie ist ausdrücklich **nicht** als Abschluss aller V3-Entwicklungsziele zu verstehen.
+
+- Gemeinsame **ChromaticDesignEngine** mit maximal 25 Materialaktualisierungen pro Albumwechsel und ca. 720 ms sanfter Farbinterpolation
+- Gemeinsame Farb-Tokens für Album-Vinyl, Equalizer, karaokeaktive Wörter, Text, Icons, Glasflächen, Auswahl und Hover
+- Neue, leichtgewichtige **WPF-Vektoricons** für alle sechs Einstellungsbereiche sowie Minimieren und Schließen
+- Farbharmonisierung mit Lesbarkeitsprüfung für Primär-, Sekundär- und aktive Texte
+- Ruhiger automatischer Lesetext-Scroller ohne manuelle Seiten-Buttons. Er behauptet bewusst **keine** erfundenen Wort-Zeitmarken.
+- Konservativer lokaler Audio-Onset-Tempo-Estimator; passt Vinyl-Drehgeschwindigkeit nur bei **stabil erkanntem Takt** an, sonst bleibt 33⅓ RPM
+- Weniger überstrahlendes Karaoke-Glow und gemeinsame, interruptible Smooth-Scroll-Animation
+- Dezent verschwommener, einmaliger In-Memory-Hintergrundausschnitt im erweiterten Einstellungsfenster (kein kontinuierliches Live-Acrylic)
+- Alle vorhandenen Windows-Hotkeys und die signaturgesicherte GitHub-Update-Architektur bleiben erhalten.
+
+**Teststand:** 102 automatische Selbsttests bestanden. Echte WPF-Visual-Previews und 180-Hz-Frame-Test wurden durchgeführt. Tests auf anderer Hardware, vollständiger GitHub-v1.0.0→v1.1.0-One-Click-Update-Test und die weiteren V3-Designphasen sind nicht als abgeschlossen verifiziert.
+
+
 ## Installation
 
-Unter Releases die Datei CharliVision-1.0.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
+Unter Releases die Datei CharliVision-1.1.0-Setup-x64.exe herunterladen und unter Windows 10 oder 11 (64 Bit) starten. Sie enthält die .NET-Laufzeit, installiert ins Benutzerprofil, erzeugt einen Startmenüeintrag und optional eine Desktop-Verknüpfung. Deinstallation über Windows möglich. Die App benötigt keine Installation von Charli FPS.
 
 Der Installer ist noch NICHT mit Windows Authenticode signiert; SmartScreen kann warnen. Prüfsummen stehen im Release bereit.
 

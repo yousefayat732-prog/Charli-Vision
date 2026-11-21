@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using Drawing=System.Drawing;
 using System.Linq;
 using System.IO;
 using System.Threading;
@@ -10,6 +13,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinForms=System.Windows.Forms;
 
@@ -20,8 +24,8 @@ public partial class SettingsWindow : Window
     private readonly MainWindow _host;
     private readonly AppSettings _settings;
     private readonly HotkeyManager _hotkeys;
-    private readonly DispatcherTimer _paletteTimer=new(){Interval=TimeSpan.FromMilliseconds(60)};
     private readonly DispatcherTimer _saveTimer=new(){Interval=TimeSpan.FromMilliseconds(330)};
+    private readonly SmoothScrollController _scroll;
     private VisionAction? _recording;
     private CancellationTokenSource? _alignmentCancel;
     private LocalAlignmentService.Preview? _alignmentPreview;
@@ -30,21 +34,89 @@ public partial class SettingsWindow : Window
     private TextBlock? _alignmentStatusText;
     private bool _alignmentBusy;
     private string _section="Playback";
-    private Color _lastAccent=Colors.Transparent;
+    private ChromaticTokens _lastTokens;
+    private bool _hasTokens;
+    private byte _glassTintAlpha=210;
     public SettingsWindow(MainWindow host,AppSettings settings,HotkeyManager hotkeys)
     {
         InitializeComponent();
         _host=host;_settings=settings;_hotkeys=hotkeys;
-        _paletteTimer.Tick+=(_,_)=>ApplyPalette();
+        _scroll=new SmoothScrollController(SettingsScroller,()=>_settings.ReducedMotion);
+        SourceInitialized+=(_,_)=>CaptureBackdrop();
+        GlassBackdrop.SizeChanged+=(_,e)=>{
+            if(e.NewSize.Width>0&&e.NewSize.Height>0){
+                var clip=new RectangleGeometry(new Rect(0,0,
+                    e.NewSize.Width,e.NewSize.Height),16,16);
+                clip.Freeze();GlassBackdrop.Clip=clip;
+            }
+        };
+        _host.ChromaticPaletteChanged+=OnPaletteChanged;
         _saveTimer.Tick+=(_,_)=>{_saveTimer.Stop();SettingsStore.Save(_settings);};
         Loaded+=(_,_)=>{
-            _paletteTimer.Start();ApplyPalette();Select("Playback");Keyboard.Focus(this);
+            ApplyPalette();Select("Playback");Keyboard.Focus(this);
         };
         Closed+=(_,_)=>{
             _alignmentCancel?.Cancel();
-            _paletteTimer.Stop();_saveTimer.Stop();SettingsStore.Save(_settings);
+            _host.ChromaticPaletteChanged-=OnPaletteChanged;
+            _scroll.Dispose();
+            _saveTimer.Stop();SettingsStore.Save(_settings);
         };
         PreviewKeyDown+=KeyPreview;
+    }
+    internal void SavePreview(string path)
+    {
+        // Explicit QA mode only: render this settings window, not the desktop.
+        if(!IsLoaded)throw new InvalidOperationException("Settings not loaded");
+        UpdateLayout();
+        var dpi=VisualTreeHelper.GetDpi(this);
+        int width=(int)Math.Ceiling(ActualWidth*dpi.DpiScaleX);
+        int height=(int)Math.Ceiling(ActualHeight*dpi.DpiScaleY);
+        if(width<700||height<500||width>1800||height>1300)
+            throw new InvalidOperationException("Invalid preview dimensions");
+        var bitmap=new RenderTargetBitmap(width,height,
+            96*dpi.DpiScaleX,96*dpi.DpiScaleY,PixelFormats.Pbgra32);
+        bitmap.Render(this);
+        var encoder=new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream=File.Create(path);
+        encoder.Save(stream);
+    }
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr bitmap);
+    private void CaptureBackdrop()
+    {
+        // One private in-memory frosted snapshot for the settings window.
+        // Never polls the desktop or writes the background to a file.
+        try{
+            var dpi=VisualTreeHelper.GetDpi(this);
+            int w=(int)Math.Ceiling(Width*dpi.DpiScaleX);
+            int h=(int)Math.Ceiling(Height*dpi.DpiScaleY);
+            if(w<500||h<400||w>2000||h>1600)return;
+            var point=PointToScreen(new Point(0,0));
+            using var bmp=new Drawing.Bitmap(w,h,
+                Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using(var gfx=Drawing.Graphics.FromImage(bmp))
+                gfx.CopyFromScreen((int)point.X,(int)point.Y,0,0,
+                    new Drawing.Size(w,h),Drawing.CopyPixelOperation.SourceCopy);
+            double average=0;
+            for(int y=1;y<=3;y++)for(int x=1;x<=3;x++){
+                var pixel=bmp.GetPixel(w*x/4,h*y/4);
+                average+=.2126*pixel.R+.7152*pixel.G+.0722*pixel.B;
+            }
+            _glassTintAlpha=(byte)(average/9>145?229:195);
+            IntPtr handle=bmp.GetHbitmap();
+            try{
+                var source=Imaging.CreateBitmapSourceFromHBitmap(
+                    handle,IntPtr.Zero,Int32Rect.Empty,
+                    BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                GlassBackdrop.Source=source;
+            }finally{DeleteObject(handle);}
+        }catch(Exception){
+            GlassBackdrop.Source=null;
+            _glassTintAlpha=231;
+        }
     }
     private void SaveSoon()
     {
@@ -58,21 +130,26 @@ public partial class SettingsWindow : Window
             new SolidColorBrush(Color.FromRgb(255,194,134)):
             (Brush)Resources["TextMuted"];
     }
+    private void OnPaletteChanged(ChromaticTokens _) => ApplyPalette();
     private void ApplyPalette()
     {
-        var palette=_settings.AlbumColorsEnabled?_host.ActivePalette:AlbumPalette.Neutral;
-        var color=palette.Accent;
-        if(Math.Abs(color.R-_lastAccent.R)+Math.Abs(color.G-_lastAccent.G)+
-           Math.Abs(color.B-_lastAccent.B)<4)return;
-        _lastAccent=color;
-        // WPF is allowed to freeze shared resource brushes. Replacing the resource
-        // updates DynamicResource references safely without mutating a frozen object.
-        Resources["AccentBrush"]=new SolidColorBrush(color);
-        Resources["AccentSoft"]=new SolidColorBrush(
-            Color.FromArgb(42,color.R,color.G,color.B));
-        Resources["BorderBrushCustom"]=new SolidColorBrush(
-            AlbumPalette.Mix(Color.FromArgb(65,55,75,91),
-                Color.FromArgb(132,color.R,color.G,color.B),.60));
+        var tokens=_host.DesignTokens;
+        var color=tokens.Accent;
+        if(_hasTokens && _lastTokens.Equals(tokens))return;
+        _lastTokens=tokens;
+        _hasTokens=true;
+        // All WPF dynamic resources are updated together by one album event.
+        // The palette is never polled by an independent SettingsWindow timer.
+        Resources["AccentBrush"]=new SolidColorBrush(tokens.TextActive);
+        Resources["AccentSoft"]=new SolidColorBrush(tokens.HoverSurface);
+        Resources["BorderBrushCustom"]=new SolidColorBrush(tokens.GlassBorder);
+        Resources["TextPrimary"]=new SolidColorBrush(tokens.TextPrimary);
+        Resources["TextSecondary"]=new SolidColorBrush(tokens.TextSecondary);
+        Resources["TextMuted"]=new SolidColorBrush(tokens.MicroText);
+        Resources["IconBrush"]=new SolidColorBrush(tokens.Icon);
+        Resources["GlassSurfaceTint"]=new SolidColorBrush(Color.FromArgb(
+            _glassTintAlpha,tokens.GlassSurface.R,
+            tokens.GlassSurface.G,tokens.GlassSurface.B));
     }
     internal void NavigateTo(string section)
     {
@@ -98,9 +175,13 @@ public partial class SettingsWindow : Window
         SectionTitle.Text=headings[category].Item1;
         SectionDescription.Text=headings[category].Item2;
         foreach(var nav in new[]{NavPlayback,NavLyrics,NavLayout,NavDesign,NavKeys,NavApp}){
-            if((nav.Tag as string)==category)
+            if((nav.Tag as string)==category){
                 nav.SetResourceReference(System.Windows.Controls.Button.BackgroundProperty,"AccentSoft");
-            else nav.Background=Brushes.Transparent;
+                nav.SetResourceReference(System.Windows.Controls.Button.ForegroundProperty,"AccentBrush");
+            }else{
+                nav.Background=Brushes.Transparent;
+                nav.SetResourceReference(System.Windows.Controls.Button.ForegroundProperty,"TextPrimary");
+            }
         }
         SettingsContent.Children.Clear();
         switch(category){
@@ -122,15 +203,16 @@ public partial class SettingsWindow : Window
             SettingsContent.Opacity=1;
         }
     }
-    private static TextBlock Text(string value,int size=13,bool muted=false)
+    private TextBlock Text(string value,int size=13,bool muted=false)
     {
-        return new TextBlock{
+        var block=new TextBlock{
             Text=value,FontSize=size,
             FontWeight=size>=16?FontWeights.SemiBold:FontWeights.Normal,
-            Foreground=new SolidColorBrush(muted?Color.FromRgb(173,190,205):
-                Color.FromRgb(238,246,252)),
             TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center
         };
+        block.SetResourceReference(TextBlock.ForegroundProperty,
+            muted?"TextSecondary":"TextPrimary");
+        return block;
     }
     private StackPanel Card(string heading,string description)
     {

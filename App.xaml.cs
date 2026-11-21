@@ -75,14 +75,20 @@ public partial class App : Application
         // Opt-in visual QA; normal launches never open the settings automatically.
         if(Array.Exists(e.Args,x=>x.StartsWith("--settings-preview",StringComparison.OrdinalIgnoreCase)) ||
            Array.Exists(e.Args,x=>x.Equals("--glass-capture",StringComparison.OrdinalIgnoreCase)) ||
-           Array.Exists(e.Args,x=>x.Equals("--glass-capture-sync",StringComparison.OrdinalIgnoreCase)))
+           Array.Exists(e.Args,x=>x.Equals("--glass-capture-sync",StringComparison.OrdinalIgnoreCase)) ||
+           Array.Exists(e.Args,x=>x.Equals("--settings-capture",StringComparison.OrdinalIgnoreCase)))
             Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                 if(MainWindow is MainWindow overlay){
                     if(Array.Exists(e.Args,x=>x.Equals("--settings-preview-keys",
                         StringComparison.OrdinalIgnoreCase)))
                         overlay.OpenAdvancedSettings("Keys");
+                    else if(Array.Exists(e.Args,x=>x.Equals("--settings-capture",
+                        StringComparison.OrdinalIgnoreCase)))
+                        overlay.OpenAdvancedSettings("Playback");
                     else overlay.OpenSettings();
                     if(Array.Exists(e.Args,x=>x.StartsWith("--glass-capture",
+                        StringComparison.OrdinalIgnoreCase)) ||
+                       Array.Exists(e.Args,x=>x.Equals("--settings-capture",
                         StringComparison.OrdinalIgnoreCase))){
                         var previewTimer=new DispatcherTimer{
                             Interval=TimeSpan.FromMilliseconds(650)};
@@ -92,6 +98,9 @@ public partial class App : Application
                                 if(Array.Exists(e.Args,x=>x.Equals("--glass-capture-sync",
                                     StringComparison.OrdinalIgnoreCase)))
                                     overlay.CaptureGlassSyncPreview();
+                                else if(Array.Exists(e.Args,x=>x.Equals("--settings-capture",
+                                    StringComparison.OrdinalIgnoreCase)))
+                                    overlay.CaptureSettingsPreview();
                                 else overlay.CaptureGlassPreview();
                             }catch(Exception ex){SettingsStore.Log(ex);}
                         };
