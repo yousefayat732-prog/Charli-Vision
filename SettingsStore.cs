@@ -41,6 +41,8 @@ public sealed class AppSettings
     public double AudioSmoothing { get; set; }=1;
     public double LyricsGlow { get; set; }=.55;
     public bool HighContrastLyrics { get; set; }=false;
+    // The unset default preserves the existing album-color behavior.
+    public string LyricsTextColor { get; set; }="Auto";
     public bool LyricsAtmosphereEnabled { get; set; }=true;
     public double LyricsAtmosphereStrength { get; set; }=.30;
 }
@@ -83,6 +85,7 @@ public static class SettingsStore
         settings.AudioSensitivity=Math.Clamp(settings.AudioSensitivity,.5,2.5);
         settings.AudioSmoothing=Math.Clamp(settings.AudioSmoothing,.5,2.5);
         settings.LyricsGlow=Math.Clamp(settings.LyricsGlow,0,1);
+        settings.LyricsTextColor=LyricsTextColorMode.Normalize(settings.LyricsTextColor);
         settings.LyricsAtmosphereStrength=double.IsFinite(settings.LyricsAtmosphereStrength)?
             Math.Clamp(settings.LyricsAtmosphereStrength,0,.65):.30;
         return settings;

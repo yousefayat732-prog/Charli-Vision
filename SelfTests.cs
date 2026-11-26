@@ -333,6 +333,42 @@ public static class SelfTests
         Check("Monochrome cover produces neutral palette",()=>gray.Monochrome);
         Check("Crossfade endpoints",()=>AlbumPalette.Lerp(red,blue,0)==red&&
             AlbumPalette.Lerp(red,blue,1)==blue);
+        Check("Lyrics text color: manual black and white remain readable",()=>{
+            var p=AlbumPalette.Default;
+            return LyricsTextColorMode.Primary("Black",p,true)==Colors.Black &&
+                LyricsTextColorMode.Primary("White",p,false)==Colors.White &&
+                LyricsTextColorMode.Secondary("Black",p,false).R<90 &&
+                LyricsTextColorMode.Normalize("unexpected")=="Auto" &&
+                LyricsTextColorMode.Normalize(null)=="Auto";
+        });
+        Check("Lyrics text color: setting survives JSON roundtrip",()=>{
+            var original=new AppSettings{LyricsTextColor="Black"};
+            string json=System.Text.Json.JsonSerializer.Serialize(original);
+            var restored=System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json);
+            var old=System.Text.Json.JsonSerializer.Deserialize<AppSettings>("{}");
+            return restored?.LyricsTextColor=="Black" && old?.LyricsTextColor=="Auto";
+        });
+        Check("Lyrics text color: active karaoke switches without losing timing",()=>{
+            var panel=new System.Windows.Controls.WrapPanel();
+            var renderer=new KaraokeWords(panel);
+            var line=new LyricLine(TimeSpan.Zero,"Hello world",new[]{
+                new LyricWord(TimeSpan.Zero,TimeSpan.FromSeconds(1),"Hello "),
+                new LyricWord(TimeSpan.FromSeconds(1),TimeSpan.FromSeconds(2),"world")});
+            if(!renderer.Setup(line))return false;
+            renderer.Update(TimeSpan.FromMilliseconds(350));
+            int active=renderer.CurrentWordIndex;
+            renderer.TextColorMode="Black";
+            renderer.ApplyTheme(AlbumPalette.Default);
+            var first=(System.Windows.Controls.TextBlock)panel.Children[0];
+            var pending=(System.Windows.Controls.TextBlock)panel.Children[1];
+            bool black=pending.Foreground is SolidColorBrush b && b.Color.R<90;
+            renderer.Update(TimeSpan.FromMilliseconds(350));
+            renderer.TextColorMode="White";
+            renderer.ApplyTheme(AlbumPalette.Default);
+            bool white=pending.Foreground is SolidColorBrush w && w.Color.R>200;
+            return active==0 && renderer.CurrentWordIndex==0 && black && white &&
+                panel.Children.Count==2 && first.Foreground is LinearGradientBrush;
+        });
         Check("V7: repeated palette frames reuse frozen word brushes",()=>{
             var renderer=new KaraokeWords(new System.Windows.Controls.WrapPanel());
             var field=typeof(KaraokeWords).GetField("_pending",

@@ -395,6 +395,15 @@ public partial class SettingsWindow : Window
             v=>_settings.LyricsScale=v);
         Slider(karaoke,"Glow-Intensität",_settings.LyricsGlow,0,1,.05,"",
             v=>_settings.LyricsGlow=v);
+        Choice(karaoke,"Lyrics-Schriftfarbe",new[]{
+            ("Automatisch","Auto"),("Weiß","White"),("Schwarz","Black")},
+            LyricsTextColorMode.Normalize(_settings.LyricsTextColor),value=>{
+                _settings.LyricsTextColor=value;
+                _host.ApplyControlSettings();
+            });
+        karaoke.Children.Add(Text(
+            "Schwarz für helle Hintergründe · Weiß für dunkle Hintergründe. "+
+            "Gilt für Karaoke, Zeilen-Lyrics und Lesetext und bleibt gespeichert.",11,true));
         Toggle(karaoke,"Wortvergrößerung verwenden",_settings.WordAnimationEnabled,
             v=>_settings.WordAnimationEnabled=v);
         Toggle(karaoke,"Hoher Textkontrast (Barrierefreiheit)",
