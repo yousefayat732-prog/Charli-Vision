@@ -398,8 +398,6 @@ public partial class GlassMenuWindow : Window
                 p.Children.Add(status);
             });
             Sub("\uE823","Lyrics-Synchronisation","›",SyncFlyout);
-            Toggle("\uE765","Wortanimation",_settings.WordAnimationEnabled,
-                ()=>_settings.WordAnimationEnabled=!_settings.WordAnimationEnabled);
             Section("▦","Layout");
             Act("\uE7F3","Position verschieben","›",_host.PrepareMove);
             Sub("\uE78E","Größe","100 %  ›",p=>{

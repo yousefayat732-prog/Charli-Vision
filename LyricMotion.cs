@@ -15,40 +15,38 @@ internal sealed class LyricMotion
     private const int VisibleRadius = 2;
     private static readonly FontFamily LyricFont = new("Segoe UI Variable Display,Segoe UI");
 
-    private readonly record struct Pose(double Center, double Scale, double Opacity)
+    private readonly record struct Pose(double Center, double Scale, double Opacity, double Focus)
     {
         public Pose At(Pose target, double movement, double fade) => new(
             Center + (target.Center - Center) * movement,
             Scale + (target.Scale - Scale) * movement,
-            Opacity + (target.Opacity - Opacity) * fade);
+            Opacity + (target.Opacity - Opacity) * fade,
+            Focus + (target.Focus - Focus) * fade);
     }
 
     private sealed class Row
     {
-        internal readonly Grid Host = new() { VerticalAlignment = VerticalAlignment.Top };
         internal readonly TextBlock Text = new()
         {
             FontFamily = LyricFont,
             FontWeight = FontWeights.ExtraBold,
             TextWrapping = TextWrapping.Wrap
         };
-        internal readonly WrapPanel Words = new();
         internal readonly ScaleTransform Scale = new();
         internal readonly TranslateTransform Offset = new();
-        internal readonly DropShadowEffect Glow = new() { BlurRadius = 7, ShadowDepth = 0 };
-        internal readonly KaraokeWords Karaoke;
+        internal readonly DropShadowEffect Glow = new() { BlurRadius = 4, ShadowDepth = 0 };
+        private readonly SolidColorBrush _ink = new();
+        private Color _primary = Colors.White, _muted = Colors.LightGray;
+        private double _glow;
         internal int Index = -1;
-        internal bool Timed;
         internal double Height;
         internal Pose From, Target, Current;
 
         internal Row()
         {
-            Host.Opacity = 0;
-            Host.Children.Add(Text);
-            Host.Children.Add(Words);
-            Host.RenderTransform = new TransformGroup { Children = { Scale, Offset } };
-            Karaoke = new KaraokeWords(Words);
+            Text.Opacity = 0;
+            Text.Foreground = _ink;
+            Text.RenderTransform = new TransformGroup { Children = { Scale, Offset } };
         }
 
         internal void Apply(Pose pose)
@@ -56,33 +54,52 @@ internal sealed class LyricMotion
             if (Current == pose) return;
             Current = pose;
             Scale.ScaleX = Scale.ScaleY = pose.Scale;
-            Offset.X = 12 * (1 - pose.Scale);
             Offset.Y = pose.Center - Height * pose.Scale / 2;
-            Host.Opacity = pose.Opacity;
+            Text.Opacity = pose.Opacity;
+            Paint();
+        }
+
+        internal void Theme(Color accent, Color primary, Color muted)
+        {
+            _primary = primary;
+            _muted = muted;
+            Glow.Color = accent;
+            Paint();
+        }
+
+        internal void SetGlow(double glow)
+        {
+            _glow = .16 * Math.Clamp(glow, 0, 1);
+            Paint();
+        }
+
+        private void Paint()
+        {
+            var color = AlbumPalette.Mix(_muted, _primary, Current.Focus);
+            if (_ink.Color != color) _ink.Color = color;
+            Glow.Opacity = _glow * Current.Focus;
+            var effect = Glow.Opacity > .001 ? Glow : null;
+            if (Text.Effect != effect) Text.Effect = effect;
         }
     }
 
     private readonly Row[] _rows = new Row[2 * Radius + 1];
     private IReadOnlyList<LyricLine>? _source;
     private Row? _active;
-    private double _start, _duration, _width, _size, _glow;
-    private bool _highContrast, _reduceWordMotion;
-    private AlbumPalette _palette = AlbumPalette.Neutral;
-    private Brush _primary = Brushes.White, _muted = Brushes.LightGray;
+    private double _start, _duration, _width, _size;
+    private bool _highContrast;
 
     internal LyricMotion(Canvas surface)
     {
         for (int i = 0; i < _rows.Length; i++)
         {
             _rows[i] = new Row();
-            surface.Children.Add(_rows[i].Host);
+            surface.Children.Add(_rows[i].Text);
         }
     }
 
     internal bool HasVisibleText { get; private set; }
-    internal string ActiveText => _active is { Timed: false } row ? row.Text.Text : "";
-    internal int WordCount => _active is { Timed: true } row ? row.Words.Children.Count : 0;
-    internal int CurrentWordIndex => _active?.Karaoke.CurrentWordIndex ?? -1;
+    internal string ActiveText => _active?.Text.Text ?? "";
     internal bool HasContext => _active != null &&
         ContextIsVisible(_active.Index - 1) && ContextIsVisible(_active.Index + 1);
 
@@ -90,37 +107,20 @@ internal sealed class LyricMotion
         _rows[index % _rows.Length] is { } row && row.Index == index && row.Target.Opacity > 0 &&
         !string.IsNullOrWhiteSpace(row.Text.Text);
 
-    internal bool Configure(double width, double size, bool highContrast, bool reduceWordMotion, double glow)
+    internal bool Configure(double width, double size, bool highContrast, double glow)
     {
         bool layoutChanged = _width != width || _size != size || _highContrast != highContrast;
         if (layoutChanged) Clear();
         _width = width;
         _size = size;
         _highContrast = highContrast;
-        _reduceWordMotion = reduceWordMotion;
-        _glow = glow;
-        foreach (var row in _rows)
-        {
-            row.Karaoke.HighContrast = highContrast;
-            row.Karaoke.ReducedMotion = reduceWordMotion;
-            row.Karaoke.GlowStrength = glow;
-            row.Glow.Opacity = KaraokeWords.VisualGlowOpacity(glow);
-        }
+        foreach (var row in _rows) row.SetGlow(glow);
         return layoutChanged;
     }
 
-    internal void ApplyTheme(AlbumPalette palette, Brush primary, Brush muted)
+    internal void ApplyTheme(Color accent, Color primary, Color muted)
     {
-        _palette = palette;
-        _primary = primary;
-        _muted = muted;
-        foreach (var row in _rows)
-        {
-            row.Text.Foreground = row == _active ? primary : muted;
-            row.Glow.Color = palette.Accent;
-            if (row.Timed && row.Index >= 0)
-                row.Karaoke.ApplyTheme(palette);
-        }
+        foreach (var row in _rows) row.Theme(accent, primary, muted);
     }
 
     internal void Clear()
@@ -133,10 +133,7 @@ internal sealed class LyricMotion
         {
             row.Index = -1;
             row.Apply(default);
-            row.Karaoke.Clear();
             row.Text.Text = "";
-            row.Text.Effect = null;
-            row.Timed = false;
         }
     }
 
@@ -158,19 +155,12 @@ internal sealed class LyricMotion
         }
         int first = Math.Max(0, anchor - VisibleRadius);
         int last = Math.Min(lines.Count - 1, anchor + VisibleRadius);
-        var previous = _active;
         _active = index >= 0 ? Prepare(lines, index) : null;
-        if (previous != _active)
-            previous?.Karaoke.SetContext();
 
         for (int lineIndex = first; lineIndex <= last; lineIndex++)
-        {
-            var row = Prepare(lines, lineIndex);
-            row.Text.Foreground = row == _active ? _primary : _muted;
-            row.Text.Effect = row == _active && !row.Timed ? row.Glow : null;
-        }
+            Prepare(lines, lineIndex);
 
-        var center = new Pose(FocusY, SizeAt(_active, 0), _active == null ? 0 : 1);
+        var center = new Pose(FocusY, SizeAt(_active, 0), 1, 1);
         if (_active != null)
             Target(_active, center, duration);
         for (int direction = -1; direction <= 1; direction += 2)
@@ -186,7 +176,7 @@ internal sealed class LyricMotion
                 double opacity = distance switch
                 {
                     1 when _highContrast => .88,
-                    1 => direction < 0 ? .40 : .60,
+                    1 => direction < 0 ? .48 : .43,
                     2 => _highContrast ? .42 : .23,
                     _ => 0
                 };
@@ -195,7 +185,7 @@ internal sealed class LyricMotion
                 // Keep full letters inside the viewport. A long active lyric
                 // takes precedence over context that would otherwise be clipped.
                 if (y - half < 2 || y + half > ViewportHeight - 2) opacity = 0;
-                Target(row, new Pose(y, scale, opacity), duration);
+                Target(row, new Pose(y, scale, opacity, 0), duration);
                 edge += direction * half * 2;
             }
         }
@@ -203,7 +193,7 @@ internal sealed class LyricMotion
         foreach (var row in _rows)
         {
             if (row.Index >= first && row.Index <= last) continue;
-            Target(row, row.Current with { Opacity = 0 }, duration);
+            Target(row, row.Current with { Opacity = 0, Focus = 0 }, duration);
         }
         _start = now;
         _duration = duration;
@@ -221,21 +211,14 @@ internal sealed class LyricMotion
         row.Index = index;
         row.Apply(default);
         row.From = row.Target = default;
-        row.Host.Width = _width;
+        row.Text.Width = _width;
         row.Text.Text = line.Text;
         row.Text.FontSize = (line.Text.Length switch
         {
             <23 => 50, <39 => 43, <59 => 36, <100 => 29, _ => 23
         }) * _size;
-        row.Karaoke.SizeScale = _size;
-        row.Karaoke.HighContrast = _highContrast;
-        row.Karaoke.ReducedMotion = _reduceWordMotion;
-        row.Karaoke.GlowStrength = _glow;
-        row.Timed = row.Karaoke.Setup(line);
-        row.Text.Visibility = row.Timed ? Visibility.Collapsed : Visibility.Visible;
-        if (row.Timed) row.Karaoke.ApplyTheme(_palette);
-        row.Host.Measure(new Size(_width, double.PositiveInfinity));
-        row.Height = row.Host.DesiredSize.Height;
+        row.Text.Measure(new Size(_width, double.PositiveInfinity));
+        row.Height = row.Text.DesiredSize.Height;
         return row;
     }
 
@@ -256,12 +239,10 @@ internal sealed class LyricMotion
 
     private static void Target(Row row, Pose target, double duration)
     {
-        row.From = row.Current.Opacity == 0 ? target with { Opacity = 0 } : row.Current;
+        row.From = row.Current.Opacity == 0 ? target with { Opacity = 0, Focus = 0 } : row.Current;
         row.Target = target;
         if (duration <= 0) row.Apply(target);
     }
-
-    internal void UpdateWord(TimeSpan position) => _active?.Karaoke.Update(position);
 
     internal void Tick(double now)
     {

@@ -77,7 +77,6 @@ public partial class MainWindow : Window
     private bool _colorModeWasEnabled=true;
     private double _lastRenderedLyricsScale=1;
     private bool _lastRenderedReducedMotion;
-    private bool _lastRenderedWordAnimation=true;
     private bool _lastHighContrast;
     private bool _forceThemeRefresh=true;
 
@@ -103,7 +102,6 @@ public partial class MainWindow : Window
         _colorModeWasEnabled=_settings.AlbumColorsEnabled;
         _lastRenderedLyricsScale=_settings.LyricsScale;
         _lastRenderedReducedMotion=_settings.ReducedMotion;
-        _lastRenderedWordAnimation=_settings.WordAnimationEnabled;
         _desktop=new DesktopLayer(this);
         _settings.AlwaysOnTop=false;
         _settings.Scale = Math.Clamp(_settings.Scale,.65,1.65);
@@ -603,7 +601,7 @@ public partial class MainWindow : Window
 
     private bool ConfigureLyricMotion() => _lyricMotion.Configure(
         LyricsViewportWidth, _settings.LyricsScale, _settings.HighContrastLyrics,
-        _settings.ReducedMotion || !_settings.WordAnimationEnabled, _settings.LyricsGlow);
+        _settings.LyricsGlow);
 
     private void UpdateLyrics()
     {
@@ -662,7 +660,6 @@ public partial class MainWindow : Window
         _lyricMotion.Tick(now);
         if (position is TimeSpan playbackPosition)
         {
-            if (index >= 0) _lyricMotion.UpdateWord(playbackPosition);
             if (playback.Playing && index + 1 < _lines.Count &&
                 (_lines[index + 1].Time - playbackPosition).TotalMilliseconds <= 180 * playback.Rate)
                 _lyricMotion.PrepareNextEdge(_lines, index);
@@ -714,13 +711,12 @@ public partial class MainWindow : Window
         var quiet=_settings.HighContrastLyrics?
             Color.FromRgb(224,232,241):
             AlbumPalette.Mix(Color.FromRgb(175,182,192),palette.Secondary,.20);
-        var muted=new SolidColorBrush(quiet);muted.Freeze();
         if(LyricsAtmosphere.Background is SolidColorBrush ambient)
             ambient.Color=palette.Accent;
         if(LyricsAtmosphereSecondary.Background is SolidColorBrush diffuse)
             diffuse.Color=palette.Secondary;
         PlainLyricsText.Foreground=primary;
-        _lyricMotion.ApplyTheme(palette,primary,muted);
+        _lyricMotion.ApplyTheme(palette.Accent,color,quiet);
     }
     internal static double FrameBudgetForProfile(string profile,bool fullyOccluded,
         bool userEnabledAutopilot)
@@ -807,7 +803,7 @@ public partial class MainWindow : Window
             try {
                 Directory.CreateDirectory(SettingsStore.DirectoryPath);
                 File.WriteAllText(Path.Combine(SettingsStore.DirectoryPath,"test-status.txt"),
-                    $"SpotifyPlaying={_playing}; LoopbackAvailable={_audio.Available}; Peak={levels?.Max():F4}; AudioRms={_audio.LastRms:F5}; AudioGain={_audio.NormalizationGain:F1}; VinylRenderMs={Vinyl.LastRenderMs:F2}; GrooveCount={Vinyl.GrooveCount}; VinylQuality={Vinyl.Quality}; FullyOccluded={_fullyOccluded}; ClockValid={_media.Clock.Valid}; ClockSec={_media.Clock.Estimated()?.TotalSeconds:F2}; DurationSec={_media.Clock.Duration.TotalSeconds:F0}; LyricsCount={_lines.Count}; WordSyncedLines={_lines.Count(x=>x.Words is {Count:>0})}; LastWord={_lyricMotion.CurrentWordIndex}; ClockSampleAgeMs={_media.Clock.SampleAgeMs:F1}; ClockErrorMs={_media.Clock.LastErrorMs:F1}; PollMs={_media.LastPollMs:F1}; MetadataMs={_media.LastMetadataQueryMs:F1}; RecognizeMs={_media.LastRecognitionDelayMs:F1}; LyricsReadyMs={_lastLyricsReadyMs:F1}; LookupMs={_lyricsService.LastLookupMs:F1}; CacheHit={_lyricsService.LastCacheHit}; LyricsProvider={_lyricResult.Source}; LyricsQuality={_lyricResult.Quality}; ProviderRequests={_lyricsService.LastProviderAttempts}; LyricsOffsetMs={_syncSettings.EffectiveMs(_songKey,_deviceKey)}; TextVisible={TitleRegion.Visibility==Visibility.Visible}; ActualLyricsVisible={LyricsRendererVisible}; PlainChars={PlainLyricsText.Text.Length}; ActiveChars={_lyricMotion.ActiveText.Length}; WordChildren={_lyricMotion.WordCount}; LyricsStage={_lyricsPipelineState}; RetryAttempts={_lyricsRecoveryAttempts}; NextRetry={_lyricsNextRetryAt?.ToString("HH:mm:ss")??"none"}; Palette={Vinyl.CurrentPalette.Accent}; FPSIntervalMs={_targetFrameMs:F2}; FrameMeanMs={stats.MeanMs:F2}; FrameP95Ms={stats.P95Ms:F2}; FrameP99Ms={stats.P99Ms:F2}; FrameMaxMs={stats.MaxMs:F2}; FrameSampleCount={_framePacing.Count}; EstimatedFrameMisses={_framePacing.EstimatedMisses}");
+                    $"SpotifyPlaying={_playing}; LoopbackAvailable={_audio.Available}; Peak={levels?.Max():F4}; AudioRms={_audio.LastRms:F5}; AudioGain={_audio.NormalizationGain:F1}; VinylRenderMs={Vinyl.LastRenderMs:F2}; GrooveCount={Vinyl.GrooveCount}; VinylQuality={Vinyl.Quality}; FullyOccluded={_fullyOccluded}; ClockValid={_media.Clock.Valid}; ClockSec={_media.Clock.Estimated()?.TotalSeconds:F2}; DurationSec={_media.Clock.Duration.TotalSeconds:F0}; LyricsCount={_lines.Count}; WordSyncedLines={_lines.Count(x=>x.Words is {Count:>0})}; ClockSampleAgeMs={_media.Clock.SampleAgeMs:F1}; ClockErrorMs={_media.Clock.LastErrorMs:F1}; PollMs={_media.LastPollMs:F1}; MetadataMs={_media.LastMetadataQueryMs:F1}; RecognizeMs={_media.LastRecognitionDelayMs:F1}; LyricsReadyMs={_lastLyricsReadyMs:F1}; LookupMs={_lyricsService.LastLookupMs:F1}; CacheHit={_lyricsService.LastCacheHit}; LyricsProvider={_lyricResult.Source}; LyricsQuality={_lyricResult.Quality}; ProviderRequests={_lyricsService.LastProviderAttempts}; LyricsOffsetMs={_syncSettings.EffectiveMs(_songKey,_deviceKey)}; TextVisible={TitleRegion.Visibility==Visibility.Visible}; ActualLyricsVisible={LyricsRendererVisible}; PlainChars={PlainLyricsText.Text.Length}; ActiveChars={_lyricMotion.ActiveText.Length}; LyricsStage={_lyricsPipelineState}; RetryAttempts={_lyricsRecoveryAttempts}; NextRetry={_lyricsNextRetryAt?.ToString("HH:mm:ss")??"none"}; Palette={Vinyl.CurrentPalette.Accent}; FPSIntervalMs={_targetFrameMs:F2}; FrameMeanMs={stats.MeanMs:F2}; FrameP95Ms={stats.P95Ms:F2}; FrameP99Ms={stats.P99Ms:F2}; FrameMaxMs={stats.MaxMs:F2}; FrameSampleCount={_framePacing.Count}; EstimatedFrameMisses={_framePacing.EstimatedMisses}");
             } catch { }
         }
         // Render cadence is selected before Tick; no timer to reschedule.
@@ -1013,7 +1009,7 @@ public partial class MainWindow : Window
                     $"TimestampAge={_media.Clock.SampleAgeMs:F1}ms; "+
                     $"ClockCorrection={_media.Clock.LastErrorMs:F1}ms; "+
                     $"LyricsOffset={_syncSettings.EffectiveMs(_songKey,_deviceKey)}ms; "+
-                    $"Line={_activeLyricIndex}; Word={_lyricMotion.CurrentWordIndex}; "+
+                    $"Line={_activeLyricIndex}; "+
                     $"SongRecognition={_media.LastRecognitionDelayMs:F1}ms; "+
                     $"LyricsLoad={_lastLyricsReadyMs:F1}ms; "+
                     $"LyricsLookup={_lyricsService.LastLookupMs:F1}ms");
@@ -1078,7 +1074,6 @@ public partial class MainWindow : Window
             !string.IsNullOrWhiteSpace(PlainLyricsText.Text)) ||
          (LyricsStack.Visibility==Visibility.Visible && _lyricMotion.HasVisibleText));
     internal string SynchronizedActiveText => _lyricMotion.ActiveText;
-    internal int SynchronizedWordCount => _lyricMotion.WordCount;
     internal bool SynchronizedContextVisible => _lyricMotion.HasContext;
     internal string LyricsStatus=>$"{_lyricResult.Source} · {_lyricResult.Quality} · {_lyricResult.Status}";
     internal string LyricsQualityDetails
@@ -1183,11 +1178,9 @@ public partial class MainWindow : Window
             SetChromaticTarget(_settings.AlbumColorsEnabled?_lastAlbumPalette:AlbumPalette.Neutral);
         }
         bool lyricVisualChanged=ConfigureLyricMotion() || Math.Abs(_lastRenderedLyricsScale-_settings.LyricsScale)>.001 ||
-            _lastRenderedReducedMotion!=_settings.ReducedMotion ||
-            _lastRenderedWordAnimation!=_settings.WordAnimationEnabled;
+            _lastRenderedReducedMotion!=_settings.ReducedMotion;
         _lastRenderedLyricsScale=_settings.LyricsScale;
         _lastRenderedReducedMotion=_settings.ReducedMotion;
-        _lastRenderedWordAnimation=_settings.WordAnimationEnabled;
         if(lyricVisualChanged || _activeLyricIndex==-100){_activeLyricIndex=-100;if(_lines.Count>0)UpdateLyrics();}
     }
     internal void ExecuteAction(VisionAction action)
@@ -1313,7 +1306,7 @@ public partial class MainWindow : Window
                 $"TimestampAge={_media.Clock.SampleAgeMs:F1}ms; "+
                 $"ClockCorrection={_media.Clock.LastErrorMs:F1}ms; "+
                 $"LyricsOffset={_syncSettings.EffectiveMs(_songKey,_deviceKey)}ms; "+
-                $"Line={_activeLyricIndex}; Word={_lyricMotion.CurrentWordIndex}; "+
+                $"Line={_activeLyricIndex}; "+
                 $"LyricsProvider={_lyricResult.Source}; "+
                 $"LyricsQuality={_lyricResult.Quality}; "+
                 $"Lookup={_lyricsService.LastLookupMs:F1}ms");

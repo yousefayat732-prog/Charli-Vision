@@ -156,8 +156,7 @@ public static class SelfTests
                 System.Reflection.BindingFlags.Instance|
                 System.Reflection.BindingFlags.NonPublic)?.Invoke(host,null);
             return host.TitleRegion.Visibility==System.Windows.Visibility.Visible &&
-                host.SynchronizedActiveText=="" && host.SynchronizedWordCount==0 &&
-                host.LyricsRendererVisible;
+                host.SynchronizedActiveText=="" && host.LyricsRendererVisible;
         });
         Check("V5: same metadata with different duration is a new lyrics track",()=>{
             var first=new TrackState("One Song","Same Artist","Same Album",
@@ -412,34 +411,31 @@ public static class SelfTests
             return continuous && clock.Estimated(start+2*second)==TimeSpan.FromSeconds(4) &&
                 clock.PositionRevision!=revision;
         });
-        Check("V1.7.5: prepared row retains identity through interrupted motion",()=> {
+        Check("V1.7.5: word-timed lyrics move as one text element through interrupted motion",()=> {
             var canvas=new System.Windows.Controls.Canvas();
             var motion=new LyricMotion(canvas);
-            motion.Configure(570,1,false,false,.5);
+            motion.Configure(570,1,false,.5);
             var lines=new [] {
                 new LyricLine(TimeSpan.Zero,"First cue"),
                 new LyricLine(TimeSpan.FromSeconds(1),"Second cue",
-                    new [] {new LyricWord(TimeSpan.FromSeconds(1),
-                        TimeSpan.FromSeconds(2),"Second cue")}),
+                    new [] {new LyricWord(TimeSpan.FromSeconds(1),TimeSpan.FromSeconds(1.5),"Second "),
+                        new LyricWord(TimeSpan.FromSeconds(1.5),TimeSpan.FromSeconds(2),"cue")}),
                 new LyricLine(TimeSpan.FromSeconds(2),"Third cue")
             };
             motion.Show(lines,0,0,0);
-            var row=(System.Windows.Controls.Grid)canvas.Children[1];
-            var words=(System.Windows.Controls.WrapPanel)row.Children[1];
-            var word=words.Children[0];
+            var row=(System.Windows.Controls.TextBlock)canvas.Children[1];
             var transform=(System.Windows.Media.TransformGroup)row.RenderTransform;
             var offset=(System.Windows.Media.TranslateTransform)transform.Children[1];
             double incoming=offset.Y;
             motion.Show(lines,1,1,.25);
-            motion.UpdateWord(TimeSpan.FromMilliseconds(999));
-            bool beforeCue=motion.CurrentWordIndex==-1;
-            motion.UpdateWord(TimeSpan.FromSeconds(1));
+            bool wholeLineActive=motion.ActiveText=="Second cue" && row.Text=="Second cue" &&
+                row.Foreground is System.Windows.Media.SolidColorBrush;
             motion.Tick(1.08);
             double mid=offset.Y;
             motion.Show(lines,2,1.08,.25);
             bool stayedAtMid=offset.Y==mid;
             motion.Tick(1.33);
-            return beforeCue && word==words.Children[0] && incoming>mid &&
+            return wholeLineActive && ReferenceEquals(row,canvas.Children[1]) && incoming>mid &&
                 stayedAtMid && offset.Y<mid && motion.ActiveText=="Third cue" &&
                 canvas.Children.Count==7;
         });
@@ -568,18 +564,18 @@ public static class SelfTests
         Check("Ultimate P1: line entrance uses inexpensive WPF transforms",()=>{
             var canvas=new System.Windows.Controls.Canvas();
             var motion=new LyricMotion(canvas);
-            motion.Configure(576,1,false,false,.5);
+            motion.Configure(576,1,false,.5);
             var lines=new [] {new LyricLine(TimeSpan.Zero,"One"),
                 new LyricLine(TimeSpan.FromSeconds(1),"Two")};
             motion.Show(lines,0,0,0);
-            var row=(System.Windows.Controls.Grid)canvas.Children[1];
+            var row=(System.Windows.Controls.TextBlock)canvas.Children[1];
             var group=(System.Windows.Media.TransformGroup)row.RenderTransform;
             var offset=(System.Windows.Media.TranslateTransform)group.Children[1];
             double y=offset.Y;
             double width=row.Width;
             motion.Show(lines,1,1,.25);
             motion.Tick(1.125);
-            return offset.Y<y && row.Width==width && row.Opacity>.60 && row.Opacity<1;
+            return offset.Y<y && row.Width==width && row.Opacity>.43 && row.Opacity<1;
         });
         Check("Ultimate accessibility: high-contrast pending lyrics stay readable",()=>{
             var panel=new System.Windows.Controls.WrapPanel();
@@ -1796,7 +1792,7 @@ public static class SelfTests
             return host.TitleRegion.Visibility==System.Windows.Visibility.Visible &&
                 host.PlainLyricsReader.Visibility==System.Windows.Visibility.Visible &&
                 host.PlainLyricsText.Text.Contains("A sample line") &&
-                host.SynchronizedActiveText=="" && host.SynchronizedWordCount==0;
+                host.SynchronizedActiveText=="";
 
         });
         Check("Repair: closing the glass menu twice is safe",()=>{

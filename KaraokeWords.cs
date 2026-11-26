@@ -197,17 +197,4 @@ public sealed class KaraokeWords
         _panel.Visibility=Visibility.Collapsed;
         _active=-999;_lastStarted=-999;_lastProgress=-1;_lastScale=1;
     }
-
-    internal void SetContext()
-    {
-        foreach (var part in _items)
-        {
-            part.Text.BeginAnimation(UIElement.OpacityProperty,null);
-            part.Text.Foreground=_pending;
-            part.Text.Effect=null;
-            part.Text.Opacity=HighContrast?.90:.80;
-            part.Scale.ScaleX=part.Scale.ScaleY=1;
-        }
-        _active=-999;_lastStarted=-999;_lastProgress=-1;_lastScale=1;
-    }
 }

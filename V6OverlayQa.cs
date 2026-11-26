@@ -93,11 +93,8 @@ internal static class V6OverlayQa
                         Invoke(host,"UpdateLyrics");
                         if(!host.SynchronizedContextVisible)
                             throw new InvalidOperationException("3-line layout missing");
-                        if(entry.Mode=="Word"){
-                            if(host.SynchronizedWordCount==0)
-                                throw new InvalidOperationException("Word panel hidden");
-                        }else if(string.IsNullOrWhiteSpace(host.SynchronizedActiveText))
-                            throw new InvalidOperationException("Line panel hidden");
+                        if(host.SynchronizedActiveText!=current.Text)
+                            throw new InvalidOperationException("Full active lyric hidden or incomplete");
                     }
                     if(!host.LyricsRendererVisible)
                         throw new InvalidOperationException("No rendered WPF lyrics");

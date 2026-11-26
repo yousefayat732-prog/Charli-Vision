@@ -390,14 +390,12 @@ public partial class SettingsWindow : Window
                 Button("+100 ms",()=>{_host.AdjustLyrics(scope,100);Select("Lyrics");}),
                 Button("Zurücksetzen",()=>{_host.ResetLyrics(scope);Select("Lyrics");}));
         }
-        var karaoke=Card("✦  Wortanimation","Nur echte Wort-Zeitstempel; keine künstlichen Zeitwerte.");
-        Slider(karaoke,"Lyrics-Größe",_settings.LyricsScale,.70,1.40,.05,"×",
+        var appearance=Card("Textdarstellung","Ganze Zeilen werden synchron zum Song hervorgehoben.");
+        Slider(appearance,"Lyrics-Größe",_settings.LyricsScale,.70,1.40,.05,"×",
             v=>_settings.LyricsScale=v);
-        Slider(karaoke,"Glow-Intensität",_settings.LyricsGlow,0,1,.05,"",
+        Slider(appearance,"Glow-Intensität",_settings.LyricsGlow,0,1,.05,"",
             v=>_settings.LyricsGlow=v);
-        Toggle(karaoke,"Wortvergrößerung verwenden",_settings.WordAnimationEnabled,
-            v=>_settings.WordAnimationEnabled=v);
-        Toggle(karaoke,"Hoher Textkontrast (Barrierefreiheit)",
+        Toggle(appearance,"Hoher Textkontrast (Barrierefreiheit)",
             _settings.HighContrastLyrics,v=>_settings.HighContrastLyrics=v,
             "Bessere Lesbarkeit vor hellen und dunklen Wallpapers.");
         BuildLocalAlignmentSection();

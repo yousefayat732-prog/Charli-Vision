@@ -30,7 +30,6 @@ public sealed class AppSettings
     public System.Collections.Generic.Dictionary<string,string> Hotkeys { get; set; }=new();
     public bool AlbumColorsEnabled { get; set; }=true;
     public bool PositionLocked { get; set; }=false;
-    public bool WordAnimationEnabled { get; set; }=true;
     public bool VinylRotationEnabled { get; set; }=true;
     public bool AdaptiveVinylTempoEnabled { get; set; }=true;
     public double VinylBaseRpm { get; set; }=33.333;
