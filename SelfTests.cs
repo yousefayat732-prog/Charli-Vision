@@ -151,12 +151,12 @@ public static class SelfTests
             typeof(MainWindow).GetField("_lines",
                 System.Reflection.BindingFlags.Instance|
                 System.Reflection.BindingFlags.NonPublic)?.SetValue(host,lines);
-            typeof(MainWindow).GetMethod("ShowUpcomingSourceLine",
+            typeof(MainWindow).GetMethod("UpdateLyrics",
                 System.Reflection.BindingFlags.Instance|
                 System.Reflection.BindingFlags.NonPublic)?.Invoke(host,null);
             return host.TitleRegion.Visibility==System.Windows.Visibility.Visible &&
-                host.NextLyric.Text=="Upcoming genuine line" &&
-                host.ActiveLyric.Text=="" && host.LyricsRendererVisible;
+                host.SynchronizedActiveText=="" && host.SynchronizedWordCount==0 &&
+                host.LyricsRendererVisible;
         });
         Check("V5: same metadata with different duration is a new lyrics track",()=>{
             var first=new TrackState("One Song","Same Artist","Same Album",
@@ -300,14 +300,12 @@ public static class SelfTests
         Check("WPF karaoke region is blank by default and after clear",()=> {
             var window=new MainWindow();
             bool initiallyHidden=window.TitleRegion.Visibility==System.Windows.Visibility.Collapsed &&
-                window.ActiveLyric.Text=="" && window.PreviousLyric.Text=="" &&
-                window.NextLyric.Text=="";
+                !window.LyricsRendererVisible && window.SynchronizedActiveText=="";
             var clear=typeof(MainWindow).GetMethod("ClearLyrics",
                 System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
             clear?.Invoke(window,new object[]{true});
             return initiallyHidden && window.TitleRegion.Visibility==System.Windows.Visibility.Collapsed &&
-                window.ActiveLyric.Text=="" && window.PreviousLyric.Text=="" &&
-                window.NextLyric.Text=="";
+                !window.LyricsRendererVisible && window.SynchronizedActiveText=="";
         });
         Check("Seek backwards restores upcoming-word colors",()=> {
             var panel=new System.Windows.Controls.WrapPanel();
@@ -392,6 +390,57 @@ public static class SelfTests
                 now,true,true),1.5,stamp,now,true);
             var future=sync.Estimated(stamp+2*System.Diagnostics.Stopwatch.Frequency);
             return future==TimeSpan.FromSeconds(11);
+        });
+        Check("V1.7.5: drift slews without rewinding and a seek snaps",()=> {
+            var clock=new PrecisionPlaybackClock();
+            long start=PrecisionPlaybackClock.Stamp();
+            long second=System.Diagnostics.Stopwatch.Frequency;
+            var utc=DateTimeOffset.UtcNow;
+            var duration=TimeSpan.FromMinutes(3);
+            clock.Update(new PlaybackClock(TimeSpan.FromSeconds(10),duration,utc,true,true),
+                1,start,utc);
+            long revision=clock.PositionRevision;
+            clock.Update(new PlaybackClock(TimeSpan.FromSeconds(10.85),duration,utc,true,true),
+                1,start+second,utc);
+            bool continuous=clock.Estimated(start+second)==TimeSpan.FromSeconds(11) &&
+                clock.Estimated(start+second+second/10)>TimeSpan.FromSeconds(11) &&
+                Math.Abs(clock.Estimated(start+2*second)!.Value.TotalSeconds-11.85)<.001 &&
+                clock.PositionRevision==revision;
+            clock.Update(new PlaybackClock(TimeSpan.FromSeconds(4),duration,utc,true,true),
+                1,start+2*second,utc);
+            return continuous && clock.Estimated(start+2*second)==TimeSpan.FromSeconds(4) &&
+                clock.PositionRevision!=revision;
+        });
+        Check("V1.7.5: prepared row retains identity through interrupted motion",()=> {
+            var canvas=new System.Windows.Controls.Canvas();
+            var motion=new LyricMotion(canvas);
+            motion.Configure(570,1,false,false,.5);
+            var lines=new [] {
+                new LyricLine(TimeSpan.Zero,"First cue"),
+                new LyricLine(TimeSpan.FromSeconds(1),"Second cue",
+                    new [] {new LyricWord(TimeSpan.FromSeconds(1),
+                        TimeSpan.FromSeconds(2),"Second cue")}),
+                new LyricLine(TimeSpan.FromSeconds(2),"Third cue")
+            };
+            motion.Show(lines,0,0,0);
+            var row=(System.Windows.Controls.Grid)canvas.Children[1];
+            var words=(System.Windows.Controls.WrapPanel)row.Children[1];
+            var word=words.Children[0];
+            var transform=(System.Windows.Media.TransformGroup)row.RenderTransform;
+            var offset=(System.Windows.Media.TranslateTransform)transform.Children[1];
+            double incoming=offset.Y;
+            motion.Show(lines,1,1,.25);
+            motion.UpdateWord(TimeSpan.FromMilliseconds(999));
+            bool beforeCue=motion.CurrentWordIndex==-1;
+            motion.UpdateWord(TimeSpan.FromSeconds(1));
+            motion.Tick(1.08);
+            double mid=offset.Y;
+            motion.Show(lines,2,1.08,.25);
+            bool stayedAtMid=offset.Y==mid;
+            motion.Tick(1.33);
+            return beforeCue && word==words.Children[0] && incoming>mid &&
+                stayedAtMid && offset.Y<mid && motion.ActiveText=="Third cue" &&
+                canvas.Children.Count==7;
         });
         Check("Precision clock: stale timeline falls back without false backjump",()=> {
             var sync=new PrecisionPlaybackClock();
@@ -516,14 +565,20 @@ public static class SelfTests
                     System.Windows.Media.ScaleTransform;
         });
         Check("Ultimate P1: line entrance uses inexpensive WPF transforms",()=>{
-            var enter=typeof(MainWindow).GetMethod("AnimateLyricEntrance",
-                System.Reflection.BindingFlags.NonPublic|
-                System.Reflection.BindingFlags.Static);
-            var element=new System.Windows.Controls.TextBlock();
-            enter?.Invoke(null,new object[]{element,6d,1d,90d});
-            return enter is not null &&
-                element.RenderTransform is System.Windows.Media.TranslateTransform &&
-                element.Opacity>0 && element.Opacity<=1;
+            var canvas=new System.Windows.Controls.Canvas();
+            var motion=new LyricMotion(canvas);
+            motion.Configure(576,1,false,false,.5);
+            var lines=new [] {new LyricLine(TimeSpan.Zero,"One"),
+                new LyricLine(TimeSpan.FromSeconds(1),"Two")};
+            motion.Show(lines,0,0,0);
+            var row=(System.Windows.Controls.Grid)canvas.Children[1];
+            var group=(System.Windows.Media.TransformGroup)row.RenderTransform;
+            var offset=(System.Windows.Media.TranslateTransform)group.Children[1];
+            double y=offset.Y;
+            double width=row.Width;
+            motion.Show(lines,1,1,.25);
+            motion.Tick(1.125);
+            return offset.Y<y && row.Width==width && row.Opacity>.60 && row.Opacity<1;
         });
         Check("Ultimate accessibility: high-contrast pending lyrics stay readable",()=>{
             var panel=new System.Windows.Controls.WrapPanel();
@@ -1399,12 +1454,12 @@ public static class SelfTests
                 Math.Abs(host.ComputeVinylRpm()-43.5)<.001;
         });
         Check("V3 completion: lyric transitions respond to tempo without timestamp drift",()=>{
-            double quiet=MainWindow.LineTransitionMs(950,1100,72);
-            double fast=MainWindow.LineTransitionMs(950,1100,151);
-            double neutral=MainWindow.LineTransitionMs(950,1100,null);
+            double quiet=MainWindow.LineTransitionMs(600,650,72);
+            double fast=MainWindow.LineTransitionMs(600,650,151);
+            double neutral=MainWindow.LineTransitionMs(600,650,null);
             return quiet>neutral && neutral>fast && fast>=55 &&
                 quiet<=420 && quiet>=200 && MainWindow.LineTransitionMs(70,70,180)==55 &&
-                MainWindow.LineTransitionMs(5000,5000,72)==420;
+                MainWindow.LineTransitionMs(5000,5000,72)==320;
         });
         Check("V3 completion: karaoke highlight is glyph-bound and never overglows",()=>{
             var panel=new System.Windows.Controls.WrapPanel();
@@ -1740,7 +1795,7 @@ public static class SelfTests
             return host.TitleRegion.Visibility==System.Windows.Visibility.Visible &&
                 host.PlainLyricsReader.Visibility==System.Windows.Visibility.Visible &&
                 host.PlainLyricsText.Text.Contains("A sample line") &&
-                host.PreviousLyric.Text=="" && host.NextLyric.Text=="";
+                host.SynchronizedActiveText=="" && host.SynchronizedWordCount==0;
 
         });
         Check("Repair: closing the glass menu twice is safe",()=>{

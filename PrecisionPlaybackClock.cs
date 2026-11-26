@@ -13,6 +13,7 @@ public sealed class PrecisionPlaybackClock
     private double _anchorSeconds;
     private double _durationSeconds;
     private double _rate=1;
+    private double _correctionSeconds,_correctionWindow;
     private bool _playing,_valid;
     private double _lastErrorMs,_sampleAgeMs;
     private DateTimeOffset _lastUpdated;
@@ -22,13 +23,16 @@ public sealed class PrecisionPlaybackClock
     public double Rate=>_rate;
     public double LastErrorMs=>_lastErrorMs;
     public double SampleAgeMs=>_sampleAgeMs;
+    internal long PositionRevision { get; private set; }
     public DateTimeOffset LastUpdatedTime=>_lastUpdated;
     public static long Stamp()=>Stopwatch.GetTimestamp();
 
     public void Reset()
     {
+        if (_valid) PositionRevision++;
         _valid=false;_playing=false;_anchorTicks=0;_anchorSeconds=0;
         _durationSeconds=0;_lastErrorMs=0;_sampleAgeMs=0;
+        _correctionSeconds=0;_correctionWindow=0;
         _lastUpdated=DateTimeOffset.MinValue;
     }
     public void Update(PlaybackClock raw,double playbackRate,
@@ -63,11 +67,18 @@ public sealed class PrecisionPlaybackClock
         bool jumped=newTrack || !_valid || playing!=_playing ||
             Math.Abs(_durationSeconds-raw.Duration.TotalSeconds)>2 ||
             Math.Abs(delta)>.34;
-        if(!jumped){
-            // Small errors are smoothed to avoid visual jitter, but word
-            // boundaries remain tied to the current (monotonic) estimated time.
-            double factor=Math.Abs(delta)<.08?.18:.55;
-            seconds=prediction+delta*factor;
+        if (newTrack || !_valid || Math.Abs(_durationSeconds-raw.Duration.TotalSeconds)>2 ||
+            (playing==_playing && Math.Abs(delta)>.34))
+            PositionRevision++;
+        _correctionSeconds=0;
+        _correctionWindow=0;
+        if (!jumped && playing)
+        {
+            // Correct ordinary drift continuously at up to 40% of playback
+            // rate. A negative adjustment can slow but cannot reverse time.
+            _correctionSeconds=delta;
+            _correctionWindow=Math.Max(.18,Math.Abs(delta)/(.40*rate));
+            seconds=prediction;
         }
         _anchorTicks=observationTicks;
         _anchorSeconds=seconds;
@@ -80,7 +91,9 @@ public sealed class PrecisionPlaybackClock
     {
         if(!_valid)return 0;
         double elapsed=Math.Max(0,(ticks-_anchorTicks)/(double)Stopwatch.Frequency);
-        double value=_anchorSeconds+(_playing ? elapsed*_rate : 0);
+        double correction=_correctionWindow>0?
+            _correctionSeconds*Math.Min(1,elapsed/_correctionWindow):0;
+        double value=_anchorSeconds+(_playing ? elapsed*_rate+correction : 0);
         return Math.Clamp(value,0,_durationSeconds);
     }
     public TimeSpan? Estimated() => Estimated(Stamp());

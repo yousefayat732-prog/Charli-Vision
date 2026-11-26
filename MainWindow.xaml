@@ -26,62 +26,7 @@
       Opacity=".30" Margin="0,0,0,0"/>
     <Border x:Name="LyricsAtmosphereSecondary" IsHitTestVisible="False"
       Opacity=".20" Margin="10,8,0,12"/>
-    <Grid x:Name="LyricsStack" VerticalAlignment="Stretch">
-     <Grid.RowDefinitions>
-      <RowDefinition Height="40"/>
-      <RowDefinition Height="62"/>
-      <RowDefinition Height="*"/>
-      <RowDefinition Height="62"/>
-      <RowDefinition Height="40"/>
-     </Grid.RowDefinitions>
-     <TextBlock x:Name="FarPreviousLyric" Grid.Row="0" VerticalAlignment="Bottom" Visibility="Collapsed" Text="" Opacity="0.30"
-       FontSize="16" FontWeight="Medium" TextWrapping="Wrap"
-       MaxHeight="32" Margin="12,0,0,6" Foreground="#FFC4C9D0">
-      <TextBlock.Effect><BlurEffect Radius="1.2" RenderingBias="Performance"/></TextBlock.Effect>
-     </TextBlock>
-     <TextBlock x:Name="PreviousLyric" Grid.Row="1" VerticalAlignment="Bottom" Text="" Opacity="0.62"
-       Foreground="#FFC4C9D0"
-       FontFamily="Segoe UI Variable Display,Segoe UI"
-       FontSize="23" FontWeight="Medium"
-       TextWrapping="Wrap" MinHeight="36" MaxHeight="70"
-       Margin="12,0,0,8">
-      <TextBlock.Effect>
-       <DropShadowEffect Color="#FF05060A" BlurRadius="3" ShadowDepth="0" Opacity="0.24"/>
-      </TextBlock.Effect>
-     </TextBlock>
-     <Grid x:Name="ActiveLyricsSlot" Grid.Row="2" VerticalAlignment="Stretch">
-
-     <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" VerticalAlignment="Center">
-      <Grid Width="576">
-     <TextBlock x:Name="ActiveLyric" Text=""
-       Foreground="#FFFFF5EC" FontFamily="Segoe UI Variable Display,Segoe UI"
-       FontSize="45" FontWeight="ExtraBold"
-       TextWrapping="Wrap" TextTrimming="None" VerticalAlignment="Center"
-       RenderTransformOrigin="0.5,0.5">
-      <TextBlock.Effect>
-       <DropShadowEffect x:Name="LyricsGlow" Color="#FFF46C26"
-         BlurRadius="8" ShadowDepth="0" Opacity="0.15"/>
-      </TextBlock.Effect>
-     </TextBlock>
-     <WrapPanel x:Name="WordLyricPanel" Visibility="Collapsed"
-         HorizontalAlignment="Left" VerticalAlignment="Center"
-         MaxWidth="576" Margin="0,2,0,2"/>
-      </Grid>
-     </Viewbox>
-     </Grid>
-     <TextBlock x:Name="NextLyric" Grid.Row="3" VerticalAlignment="Top" Text="" Opacity="0.64"
-       Foreground="#FFC4C9D0"
-       FontFamily="Segoe UI Variable Display,Segoe UI"
-       FontSize="23" FontWeight="Medium"
-       TextWrapping="Wrap" MinHeight="36" MaxHeight="70" Margin="12,8,0,0">
-      <TextBlock.Effect>
-       <DropShadowEffect Color="#FF05060A" BlurRadius="3" ShadowDepth="0" Opacity="0.24"/>
-      </TextBlock.Effect>
-     </TextBlock>
-     <TextBlock x:Name="FarNextLyric" Grid.Row="4" VerticalAlignment="Top" Visibility="Collapsed" Text="" Opacity="0.30"
-       FontSize="16" FontWeight="Medium" TextWrapping="Wrap"
-       MaxHeight="32" Margin="12,6,0,0" Foreground="#FFC4C9D0"><TextBlock.Effect><BlurEffect Radius="1.2" RenderingBias="Performance"/></TextBlock.Effect></TextBlock>
-    </Grid>
+    <Canvas x:Name="LyricsStack" IsHitTestVisible="False"/>
      <!-- Plain lyrics are displayed as a calm, automatic reader, not manually
           paged or falsely synchronized to words. -->
      <ScrollViewer x:Name="PlainLyricsReader" Height="298" VerticalAlignment="Center"

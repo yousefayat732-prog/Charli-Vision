@@ -91,17 +91,12 @@ internal static class V6OverlayQa
                         media.Clock.Update(new PlaybackClock(at,end,now,
                             false,true),1,PrecisionPlaybackClock.Stamp(),now,true);
                         Invoke(host,"UpdateLyrics");
-                        if(host.PreviousLyric.Visibility!=Visibility.Visible ||
-                            host.NextLyric.Visibility!=Visibility.Visible ||
-                            string.IsNullOrWhiteSpace(host.PreviousLyric.Text) ||
-                            string.IsNullOrWhiteSpace(host.NextLyric.Text))
+                        if(!host.SynchronizedContextVisible)
                             throw new InvalidOperationException("3-line layout missing");
                         if(entry.Mode=="Word"){
-                            if(host.WordLyricPanel.Visibility!=Visibility.Visible ||
-                                host.WordLyricPanel.Children.Count==0)
+                            if(host.SynchronizedWordCount==0)
                                 throw new InvalidOperationException("Word panel hidden");
-                        }else if(host.ActiveLyric.Visibility!=Visibility.Visible ||
-                            string.IsNullOrWhiteSpace(host.ActiveLyric.Text))
+                        }else if(string.IsNullOrWhiteSpace(host.SynchronizedActiveText))
                             throw new InvalidOperationException("Line panel hidden");
                     }
                     if(!host.LyricsRendererVisible)

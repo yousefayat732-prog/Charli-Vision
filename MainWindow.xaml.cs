@@ -11,9 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media.Animation;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using WinForms = System.Windows.Forms;
@@ -28,7 +26,7 @@ public partial class MainWindow : Window
     private readonly MusicTempoEstimator _tempo=new();
     private readonly DesktopLayer _desktop;
     private readonly LyricsService _lyricsService = new();
-    private readonly KaraokeWords _karaoke;
+    private readonly LyricMotion _lyricMotion;
     private readonly LyricsSyncSettings _syncSettings=new();
     private string _songKey="";
     private string? _deviceKey;
@@ -46,6 +44,8 @@ public partial class MainWindow : Window
     private string _lyricsPipelineState="Idle";
     private string _lyricsLastError="";
     private int _activeLyricIndex = -100;
+    private long _lyricClockRevision;
+    private TimeSpan? _lastLyricPosition;
     private AlbumPalette _appliedPalette = AlbumPalette.Default;
     private readonly ChromaticDesignEngine _chromatic=new();
     private bool _chromaticSubscribed;
@@ -95,11 +95,10 @@ public partial class MainWindow : Window
             Vinyl.SetQuality(quality);
         Vinyl.CoverRotates=_settings.CoverRotates;
         _deviceKey=LyricsSyncSettings.DeviceKey();
-        _karaoke=new KaraokeWords(WordLyricPanel);
+        _lyricMotion=new LyricMotion(LyricsStack);
+        ConfigureLyricMotion();
         _chromatic.Changed+=OnChromaticChanged;
         _chromatic.SetTarget(AlbumPalette.Neutral,immediate:true);
-        _karaoke.ReducedMotion=_settings.ReducedMotion;
-        _karaoke.HighContrast=_settings.HighContrastLyrics;
         _lastHighContrast=_settings.HighContrastLyrics;
         _colorModeWasEnabled=_settings.AlbumColorsEnabled;
         _lastRenderedLyricsScale=_settings.LyricsScale;
@@ -549,23 +548,14 @@ public partial class MainWindow : Window
         // time-alignment algorithm. Playback position never highlights words.
         var plain=_plainLyrics.Replace("\r","").Trim();
         if(plain.Length==0){ClearLyrics();return;}
-        _karaoke.Clear();
+        _lyricMotion.Clear();
         _plainReaderElapsed=0;
         _plainScrollPrevious=0;
-        FarPreviousLyric.Visibility=Visibility.Collapsed;
-        FarNextLyric.Visibility=Visibility.Collapsed;
-        LyricsStack.RenderTransform=Transform.Identity;
         LyricsUnavailable.Visibility=Visibility.Collapsed;
         LyricsStack.Visibility=Visibility.Collapsed;
         PlainLyricsText.Text=plain;
         PlainLyricsReader.ScrollToTop();
         PlainLyricsReader.Visibility=Visibility.Visible;
-        ActiveLyric.Visibility=Visibility.Collapsed;
-        WordLyricPanel.Visibility=Visibility.Collapsed;
-        PreviousLyric.Text="";
-        NextLyric.Text="";
-        PreviousLyric.Visibility=Visibility.Collapsed;
-        NextLyric.Visibility=Visibility.Collapsed;
         TitleRegion.Visibility=Visibility.Visible;
     }
     private void UpdatePlainReader(double dt)
@@ -597,190 +587,85 @@ public partial class MainWindow : Window
         PlainLyricsReader.Visibility=Visibility.Collapsed;
         PlainLyricsText.Text="";
         _plainReaderElapsed=0;_plainScrollPrevious=0;
-        FarPreviousLyric.Text="";FarPreviousLyric.Visibility=Visibility.Collapsed;
-        FarNextLyric.Text="";FarNextLyric.Visibility=Visibility.Collapsed;
-        LyricsStack.RenderTransform=Transform.Identity;
-        PreviousLyric.Visibility=Visibility.Visible;
-        NextLyric.Visibility=Visibility.Visible;
-        PreviousLyric.Text="";
-        ActiveLyric.BeginAnimation(OpacityProperty,null);
-        ActiveLyric.Text="";
-        ActiveLyric.Visibility=Visibility.Visible;
-        ActiveLyric.Opacity=1;
-        NextLyric.Text="";
-        _karaoke.Clear();
+        _lyricMotion.Clear();
     }
-    private static void AnimateLyricEntrance(UIElement element,
-        double fromY,double opacity,double durationMs)
-    {
-        var duration=TimeSpan.FromMilliseconds(Math.Clamp(durationMs,45,450));
-        var ease=new QuadraticEase{EasingMode=EasingMode.EaseOut};
-        var slide=new TranslateTransform(0,fromY);
-        element.RenderTransform=slide;
-        slide.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(fromY,0,duration){EasingFunction=ease});
-        element.BeginAnimation(UIElement.OpacityProperty,
-            new DoubleAnimation(Math.Max(.40,opacity-.23),opacity,duration){
-                EasingFunction=ease
-            });
-    }
-    // All lyric positions remain anchored to their actual source timestamps.
-    // Tempo only affects visual transition duration, never word/line selection.
+
     internal static double LineTransitionMs(double forwardGap,double backwardGap,double? bpm)
     {
-        double milliseconds=Math.Min(forwardGap,backwardGap)*.28;
-        if(bpm is double reliable && double.IsFinite(reliable)){
-            if(reliable>=140)milliseconds*=.84;
-            else if(reliable<=80)milliseconds*=1.12;
-        }
-        return Math.Clamp(milliseconds,55,420);
+        double window = Math.Min(forwardGap, backwardGap);
+        double duration = window * .42;
+        if (bpm is >= 140) duration *= .86;
+        else if (bpm is <= 80) duration *= 1.10;
+        return Math.Clamp(duration, 55, 320);
     }
-    private void ShowUpcomingSourceLine()
-    {
-        // Show actual source text, without pretending it is timed, while the
-        // Spotify clock is unavailable or before the first genuine cue.
-        if(_activeLyricIndex==-1 && LyricsRendererVisible)return;
-        string first=_lines.FirstOrDefault(l=>!string.IsNullOrWhiteSpace(l.Text))?.Text??"";
-        if(first.Length==0){ClearLyrics(false);return;}
-        _karaoke.Clear();
-        PlainLyricsReader.Visibility=Visibility.Collapsed;
-        ActiveLyric.Visibility=Visibility.Collapsed;
-        ActiveLyric.Text="";
-        PreviousLyric.Visibility=Visibility.Collapsed;
-        PreviousLyric.Text="";
-        NextLyric.Visibility=Visibility.Visible;
-        FarPreviousLyric.Visibility=Visibility.Collapsed;
-        FarNextLyric.Visibility=Visibility.Collapsed;
-        LyricsStack.RenderTransform=Transform.Identity;
-        LyricsUnavailable.Visibility=Visibility.Collapsed;
-        LyricsStack.Visibility=Visibility.Visible;
-        NextLyric.Text=first;
-        NextLyric.FontSize=(first.Length>75?17:22)*_settings.LyricsScale;
-        NextLyric.Opacity=.64;
-        TitleRegion.Visibility=Visibility.Visible;
-        _activeLyricIndex=-1;
-    }
+
+    private double LyricsViewportWidth => Math.Max(120, 576 - _settings.LyricsSpacing);
+
+    private bool ConfigureLyricMotion() => _lyricMotion.Configure(
+        LyricsViewportWidth, _settings.LyricsScale, _settings.HighContrastLyrics,
+        _settings.ReducedMotion || !_settings.WordAnimationEnabled, _settings.LyricsGlow);
+
     private void UpdateLyrics()
     {
-        if(_lines.Count==0)return;
-        var position=_syncSettings.Apply(_media.Clock.Estimated(),_songKey,_deviceKey);
-        if(position is null){
-            ShowUpcomingSourceLine();
-            return;
-        }
-        int index=LyricsService.ActiveAt(_lines,position.Value);
-        if(index<0){
-            ShowUpcomingSourceLine();
-            return;
-        }
-        if(index==_activeLyricIndex){
-            if(index>=0 && _lines[index].Words is {Count:>0})
-                _karaoke.Update(position.Value);
-            return;
-        }
-        int oldIndex=_activeLyricIndex;
-        double? oldFocus=null;
-        if(oldIndex>=0 && Math.Abs(oldIndex-index)==1 && IsLoaded){
-            try{
-                var arriving=index>oldIndex?NextLyric:PreviousLyric;
-                if(arriving.IsVisible)
-                    oldFocus=arriving.TranslatePoint(new Point(0,arriving.ActualHeight/2),
-                        TitleRegion).Y;
-            }catch(InvalidOperationException){}
-        }
-        LyricsUnavailable.Visibility=Visibility.Collapsed;
-        LyricsStack.Visibility=Visibility.Visible;
-        _activeLyricIndex=index;
-        string current=index<0?"":_lines[index].Text;
-        if(string.IsNullOrWhiteSpace(current)){
-            ClearLyrics(false);return;
-        }
-        string previous=index>0?_lines[index-1].Text:"";
-        string next=index+1<_lines.Count?_lines[index+1].Text:"";
-        PlainLyricsReader.Visibility=Visibility.Collapsed;
-        PreviousLyric.Visibility=Visibility.Visible;
-        NextLyric.Visibility=Visibility.Visible;
-        PreviousLyric.Text=previous;
-        NextLyric.Text=next;
-        // Additional quiet context only if the main lines leave room.
-        // Never sacrifice the visible current lyric for decorative context.
-        string farPrevious=index>1?_lines[index-2].Text:"";
-        string farNext=index+2<_lines.Count?_lines[index+2].Text:"";
-        bool context=current.Length<70 && previous.Length<80 && next.Length<80 &&
-            _settings.LyricsScale<=1.10;
-        void Context(System.Windows.Controls.TextBlock block,string line){
-            block.Text=context && line.Length<=65?line:"";
-            block.Visibility=string.IsNullOrWhiteSpace(block.Text)?
-                Visibility.Collapsed:Visibility.Visible;
-            block.FontSize=16*_settings.LyricsScale;
-        }
-        Context(FarPreviousLyric,farPrevious);
-        Context(FarNextLyric,farNext);
-        PreviousLyric.FontSize=(previous.Length>75?17:22)*_settings.LyricsScale;
-        NextLyric.FontSize=(next.Length>75?17:22)*_settings.LyricsScale;
-        TitleRegion.Visibility=Visibility.Visible;
-        var currentLine=_lines[index];
-        bool wordTiming=_karaoke.Setup(currentLine);
-        if(wordTiming){
-            ActiveLyric.Visibility=Visibility.Collapsed;
-            _karaoke.ApplyTheme(_appliedPalette);
-            _karaoke.Update(position.Value);
-        } else {
-            ActiveLyric.Visibility=Visibility.Visible;
-            ActiveLyric.Text=current;
-            ActiveLyric.FontWeight=FontWeights.ExtraBold;
-            ActiveLyric.FontSize=(current.Length switch {
-                <23=>50,<39=>43,<59=>36,<100=>29,_=>23
-            })*_settings.LyricsScale;
-        }
-        double forwardGap=index+1<_lines.Count ?
-            Math.Max(60,(_lines[index+1].Time-currentLine.Time).TotalMilliseconds):700;
-        double backwardGap=index>0?
-            Math.Max(60,(currentLine.Time-_lines[index-1].Time).TotalMilliseconds):
-            forwardGap;
-        // Rapid lyrics get a short transition. The correct word is already
-        // selected before animation begins, avoiding delayed highlighting.
-        double timeMs=LineTransitionMs(forwardGap,backwardGap,_tempo.EstimatedBpm);
-        // One coordinated vertical movement. Seeks/reloads snap to the real cue;
-        // adjacent cues animate without delaying word selection.
-        if(_settings.ReducedMotion || oldIndex<0 || Math.Abs(oldIndex-index)!=1){
-            LyricsStack.RenderTransform=Transform.Identity;
-            ActiveLyric.BeginAnimation(OpacityProperty,null);
-            ActiveLyric.Opacity=1;
-            ActiveLyric.RenderTransform=Transform.Identity;
-            PreviousLyric.BeginAnimation(OpacityProperty,null);
-            PreviousLyric.Opacity=_settings.HighContrastLyrics?.88:.62;
-            NextLyric.BeginAnimation(OpacityProperty,null);
-            NextLyric.Opacity=_settings.HighContrastLyrics?.88:.64;
-            WordLyricPanel.BeginAnimation(OpacityProperty,null);
-            WordLyricPanel.Opacity=1;
-            WordLyricPanel.RenderTransform=Transform.Identity;
-        }else {
-            ActiveLyric.BeginAnimation(OpacityProperty,null);
-            ActiveLyric.Opacity=1;ActiveLyric.RenderTransform=Transform.Identity;
-            WordLyricPanel.BeginAnimation(OpacityProperty,null);
-            WordLyricPanel.Opacity=1;WordLyricPanel.RenderTransform=Transform.Identity;
-            PreviousLyric.BeginAnimation(OpacityProperty,null);
-            PreviousLyric.Opacity=_settings.HighContrastLyrics?.88:.62;
-            PreviousLyric.RenderTransform=Transform.Identity;
-            NextLyric.BeginAnimation(OpacityProperty,null);
-            NextLyric.Opacity=_settings.HighContrastLyrics?.88:.64;
-            NextLyric.RenderTransform=Transform.Identity;
-            LyricsStack.RenderTransform=Transform.Identity;
-            double offset=index>oldIndex?84:-84;
-            if(oldFocus is double prior && IsLoaded){
-                // Reconcile actual line positions once per cue, never per frame.
-                TitleRegion.UpdateLayout();
-                var slot=ActiveLyricsSlot.TranslatePoint(
-                    new Point(0,ActiveLyricsSlot.ActualHeight/2),TitleRegion);
-                offset=Math.Clamp(prior-slot.Y,-150,150);
+        if (_lines.Count == 0) return;
+        double now = _clock.Elapsed.TotalSeconds;
+        var playback = _media.Clock;
+        var position = _syncSettings.Apply(playback.Estimated(), _songKey, _deviceKey);
+        bool discontinuity = _lyricClockRevision != playback.PositionRevision ||
+            (_lastLyricPosition.HasValue && !position.HasValue);
+        _lyricClockRevision = playback.PositionRevision;
+        _lastLyricPosition = position;
+
+        int old = _activeLyricIndex;
+        int index = -1;
+        if (position is TimeSpan time)
+        {
+            if (discontinuity || old < -1 || (old >= 0 && time < _lines[old].Time))
+                index = LyricsService.ActiveAt(_lines, time);
+            else
+            {
+                index = old;
+                if (index + 1 < _lines.Count && _lines[index + 1].Time <= time)
+                {
+                    index++;
+                    if (index + 1 < _lines.Count && _lines[index + 1].Time <= time)
+                        index = LyricsService.ActiveAt(_lines, time);
+                }
             }
-            var movement=new TranslateTransform(0,offset);
-            LyricsStack.RenderTransform=movement;
-            movement.BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(offset,0,TimeSpan.FromMilliseconds(timeMs)){
-                    EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}
-                },HandoffBehavior.SnapshotAndReplace);
+        }
+
+        if (index != old || discontinuity)
+        {
+            _activeLyricIndex = index;
+            if (index >= 0 && string.IsNullOrWhiteSpace(_lines[index].Text))
+            {
+                ClearLyrics(false);
+                return;
+            }
+            double duration = 0;
+            if (!discontinuity && !_settings.ReducedMotion && old >= -1 &&
+                index >= 0 && index == old + 1 && _lyricMotion.HasVisibleText)
+            {
+                var cue = _lines[index].Time;
+                double next = index + 1 < _lines.Count
+                    ? (_lines[index + 1].Time - cue).TotalMilliseconds : 700;
+                double previous = old >= 0 ? (cue - _lines[old].Time).TotalMilliseconds : next;
+                duration = LineTransitionMs(next, previous, _tempo.EstimatedBpm) / 1000;
+            }
+            _lyricMotion.Show(_lines, index, now, duration);
+            LyricsUnavailable.Visibility = Visibility.Collapsed;
+            PlainLyricsReader.Visibility = Visibility.Collapsed;
+            LyricsStack.Visibility = Visibility.Visible;
+            TitleRegion.Visibility = _lyricMotion.HasVisibleText ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        _lyricMotion.Tick(now);
+        if (position is TimeSpan playbackPosition)
+        {
+            if (index >= 0) _lyricMotion.UpdateWord(playbackPosition);
+            if (playback.Playing && index + 1 < _lines.Count &&
+                (_lines[index + 1].Time - playbackPosition).TotalMilliseconds <= 180 * playback.Rate)
+                _lyricMotion.PrepareNextEdge(_lines, index);
         }
     }
     private void SetChromaticTarget(AlbumPalette palette)
@@ -826,26 +711,16 @@ public partial class MainWindow : Window
         var color=_settings.HighContrastLyrics?Colors.White:
             AlbumPalette.Mix(Colors.White,palette.Highlight,.55);
         var primary=new SolidColorBrush(color);primary.Freeze();
-        ActiveLyric.Foreground=primary;
         var quiet=_settings.HighContrastLyrics?
             Color.FromRgb(224,232,241):
             AlbumPalette.Mix(Color.FromRgb(175,182,192),palette.Secondary,.20);
         var muted=new SolidColorBrush(quiet);muted.Freeze();
-        PreviousLyric.Foreground=muted;
-        NextLyric.Foreground=muted;
-        FarPreviousLyric.Foreground=muted;
-        FarNextLyric.Foreground=muted;
         if(LyricsAtmosphere.Background is SolidColorBrush ambient)
             ambient.Color=palette.Accent;
         if(LyricsAtmosphereSecondary.Background is SolidColorBrush diffuse)
             diffuse.Color=palette.Secondary;
         PlainLyricsText.Foreground=primary;
-        _karaoke.ApplyTheme(palette);
-        _karaoke.GlowStrength=_settings.LyricsGlow;
-        if(ActiveLyric.Effect is DropShadowEffect glow){
-            glow.Color=palette.Accent;
-            glow.Opacity=KaraokeWords.VisualGlowOpacity(_settings.LyricsGlow);
-        }
+        _lyricMotion.ApplyTheme(palette,primary,muted);
     }
     internal static double FrameBudgetForProfile(string profile,bool fullyOccluded,
         bool userEnabledAutopilot)
@@ -932,7 +807,7 @@ public partial class MainWindow : Window
             try {
                 Directory.CreateDirectory(SettingsStore.DirectoryPath);
                 File.WriteAllText(Path.Combine(SettingsStore.DirectoryPath,"test-status.txt"),
-                    $"SpotifyPlaying={_playing}; LoopbackAvailable={_audio.Available}; Peak={levels?.Max():F4}; AudioRms={_audio.LastRms:F5}; AudioGain={_audio.NormalizationGain:F1}; VinylRenderMs={Vinyl.LastRenderMs:F2}; GrooveCount={Vinyl.GrooveCount}; VinylQuality={Vinyl.Quality}; FullyOccluded={_fullyOccluded}; ClockValid={_media.Clock.Valid}; ClockSec={_media.Clock.Estimated()?.TotalSeconds:F2}; DurationSec={_media.Clock.Duration.TotalSeconds:F0}; LyricsCount={_lines.Count}; WordSyncedLines={_lines.Count(x=>x.Words is {Count:>0})}; LastWord={_karaoke.CurrentWordIndex}; ClockSampleAgeMs={_media.Clock.SampleAgeMs:F1}; ClockErrorMs={_media.Clock.LastErrorMs:F1}; PollMs={_media.LastPollMs:F1}; MetadataMs={_media.LastMetadataQueryMs:F1}; RecognizeMs={_media.LastRecognitionDelayMs:F1}; LyricsReadyMs={_lastLyricsReadyMs:F1}; LookupMs={_lyricsService.LastLookupMs:F1}; CacheHit={_lyricsService.LastCacheHit}; LyricsProvider={_lyricResult.Source}; LyricsQuality={_lyricResult.Quality}; ProviderRequests={_lyricsService.LastProviderAttempts}; LyricsOffsetMs={_syncSettings.EffectiveMs(_songKey,_deviceKey)}; TextVisible={TitleRegion.Visibility==Visibility.Visible}; ActualLyricsVisible={LyricsRendererVisible}; PlainChars={PlainLyricsText.Text.Length}; ActiveChars={ActiveLyric.Text.Length}; WordChildren={WordLyricPanel.Children.Count}; LyricsStage={_lyricsPipelineState}; RetryAttempts={_lyricsRecoveryAttempts}; NextRetry={_lyricsNextRetryAt?.ToString("HH:mm:ss")??"none"}; Palette={Vinyl.CurrentPalette.Accent}; FPSIntervalMs={_targetFrameMs:F2}; FrameMeanMs={stats.MeanMs:F2}; FrameP95Ms={stats.P95Ms:F2}; FrameP99Ms={stats.P99Ms:F2}; FrameMaxMs={stats.MaxMs:F2}; FrameSampleCount={_framePacing.Count}; EstimatedFrameMisses={_framePacing.EstimatedMisses}");
+                    $"SpotifyPlaying={_playing}; LoopbackAvailable={_audio.Available}; Peak={levels?.Max():F4}; AudioRms={_audio.LastRms:F5}; AudioGain={_audio.NormalizationGain:F1}; VinylRenderMs={Vinyl.LastRenderMs:F2}; GrooveCount={Vinyl.GrooveCount}; VinylQuality={Vinyl.Quality}; FullyOccluded={_fullyOccluded}; ClockValid={_media.Clock.Valid}; ClockSec={_media.Clock.Estimated()?.TotalSeconds:F2}; DurationSec={_media.Clock.Duration.TotalSeconds:F0}; LyricsCount={_lines.Count}; WordSyncedLines={_lines.Count(x=>x.Words is {Count:>0})}; LastWord={_lyricMotion.CurrentWordIndex}; ClockSampleAgeMs={_media.Clock.SampleAgeMs:F1}; ClockErrorMs={_media.Clock.LastErrorMs:F1}; PollMs={_media.LastPollMs:F1}; MetadataMs={_media.LastMetadataQueryMs:F1}; RecognizeMs={_media.LastRecognitionDelayMs:F1}; LyricsReadyMs={_lastLyricsReadyMs:F1}; LookupMs={_lyricsService.LastLookupMs:F1}; CacheHit={_lyricsService.LastCacheHit}; LyricsProvider={_lyricResult.Source}; LyricsQuality={_lyricResult.Quality}; ProviderRequests={_lyricsService.LastProviderAttempts}; LyricsOffsetMs={_syncSettings.EffectiveMs(_songKey,_deviceKey)}; TextVisible={TitleRegion.Visibility==Visibility.Visible}; ActualLyricsVisible={LyricsRendererVisible}; PlainChars={PlainLyricsText.Text.Length}; ActiveChars={_lyricMotion.ActiveText.Length}; WordChildren={_lyricMotion.WordCount}; LyricsStage={_lyricsPipelineState}; RetryAttempts={_lyricsRecoveryAttempts}; NextRetry={_lyricsNextRetryAt?.ToString("HH:mm:ss")??"none"}; Palette={Vinyl.CurrentPalette.Accent}; FPSIntervalMs={_targetFrameMs:F2}; FrameMeanMs={stats.MeanMs:F2}; FrameP95Ms={stats.P95Ms:F2}; FrameP99Ms={stats.P99Ms:F2}; FrameMaxMs={stats.MaxMs:F2}; FrameSampleCount={_framePacing.Count}; EstimatedFrameMisses={_framePacing.EstimatedMisses}");
             } catch { }
         }
         // Render cadence is selected before Tick; no timer to reschedule.
@@ -1138,7 +1013,7 @@ public partial class MainWindow : Window
                     $"TimestampAge={_media.Clock.SampleAgeMs:F1}ms; "+
                     $"ClockCorrection={_media.Clock.LastErrorMs:F1}ms; "+
                     $"LyricsOffset={_syncSettings.EffectiveMs(_songKey,_deviceKey)}ms; "+
-                    $"Line={_activeLyricIndex}; Word={_karaoke.CurrentWordIndex}; "+
+                    $"Line={_activeLyricIndex}; Word={_lyricMotion.CurrentWordIndex}; "+
                     $"SongRecognition={_media.LastRecognitionDelayMs:F1}ms; "+
                     $"LyricsLoad={_lastLyricsReadyMs:F1}ms; "+
                     $"LyricsLookup={_lyricsService.LastLookupMs:F1}ms");
@@ -1151,7 +1026,7 @@ public partial class MainWindow : Window
         Add("Größe: 125 %",() => SetScale(1.25));
         Add("Bewegungen reduzieren",()=> {
             _settings.ReducedMotion=!_settings.ReducedMotion;
-            _karaoke.ReducedMotion=_settings.ReducedMotion;
+            ApplyControlSettings();
             SavePlacement();
         },_settings.ReducedMotion);
         var profile=new MenuItem { Header="Animationsprofil", Foreground=Brushes.White };
@@ -1201,12 +1076,10 @@ public partial class MainWindow : Window
         TitleRegion.Visibility==Visibility.Visible &&
         ((PlainLyricsReader.Visibility==Visibility.Visible &&
             !string.IsNullOrWhiteSpace(PlainLyricsText.Text)) ||
-         (WordLyricPanel.Visibility==Visibility.Visible &&
-            WordLyricPanel.Children.Count>0) ||
-         (ActiveLyric.Visibility==Visibility.Visible &&
-            !string.IsNullOrWhiteSpace(ActiveLyric.Text)) ||
-         (NextLyric.Visibility==Visibility.Visible &&
-            !string.IsNullOrWhiteSpace(NextLyric.Text)));
+         (LyricsStack.Visibility==Visibility.Visible && _lyricMotion.HasVisibleText));
+    internal string SynchronizedActiveText => _lyricMotion.ActiveText;
+    internal int SynchronizedWordCount => _lyricMotion.WordCount;
+    internal bool SynchronizedContextVisible => _lyricMotion.HasContext;
     internal string LyricsStatus=>$"{_lyricResult.Source} · {_lyricResult.Quality} · {_lyricResult.Status}";
     internal string LyricsQualityDetails
     {
@@ -1291,16 +1164,11 @@ public partial class MainWindow : Window
         Vinyl.RotationEnabled=_settings.VinylRotationEnabled;
         Vinyl.SmoothingFactor=_settings.AudioSmoothing;
         _audio.Sensitivity=_settings.AudioSensitivity;
-        _karaoke.ReducedMotion=_settings.ReducedMotion || !_settings.WordAnimationEnabled;
         if(_lastHighContrast!=_settings.HighContrastLyrics){
             _lastHighContrast=_settings.HighContrastLyrics;
-            _karaoke.HighContrast=_lastHighContrast;
             _forceThemeRefresh=true;
             _activeLyricIndex=-100;
-            if(_lines.Count>0)UpdateLyrics();
         }
-        _karaoke.GlowStrength=_settings.LyricsGlow;
-        _karaoke.SizeScale=_settings.LyricsScale;
         if(Enum.TryParse<VinylQuality>(_settings.VinylQuality,true,out var quality))
             Vinyl.SetQuality(quality);
         if(Math.Abs(Width-980*_settings.Scale)>.5)
@@ -1314,15 +1182,13 @@ public partial class MainWindow : Window
             _colorModeWasEnabled=_settings.AlbumColorsEnabled;
             SetChromaticTarget(_settings.AlbumColorsEnabled?_lastAlbumPalette:AlbumPalette.Neutral);
         }
-        if(ActiveLyric.Effect is DropShadowEffect glow)
-            glow.Opacity=KaraokeWords.VisualGlowOpacity(_settings.LyricsGlow);
-        bool lyricVisualChanged=Math.Abs(_lastRenderedLyricsScale-_settings.LyricsScale)>.001 ||
+        bool lyricVisualChanged=ConfigureLyricMotion() || Math.Abs(_lastRenderedLyricsScale-_settings.LyricsScale)>.001 ||
             _lastRenderedReducedMotion!=_settings.ReducedMotion ||
             _lastRenderedWordAnimation!=_settings.WordAnimationEnabled;
         _lastRenderedLyricsScale=_settings.LyricsScale;
         _lastRenderedReducedMotion=_settings.ReducedMotion;
         _lastRenderedWordAnimation=_settings.WordAnimationEnabled;
-        if(lyricVisualChanged){_activeLyricIndex=-100;if(_lines.Count>0)UpdateLyrics();}
+        if(lyricVisualChanged || _activeLyricIndex==-100){_activeLyricIndex=-100;if(_lines.Count>0)UpdateLyrics();}
     }
     internal void ExecuteAction(VisionAction action)
     {
@@ -1447,7 +1313,7 @@ public partial class MainWindow : Window
                 $"TimestampAge={_media.Clock.SampleAgeMs:F1}ms; "+
                 $"ClockCorrection={_media.Clock.LastErrorMs:F1}ms; "+
                 $"LyricsOffset={_syncSettings.EffectiveMs(_songKey,_deviceKey)}ms; "+
-                $"Line={_activeLyricIndex}; Word={_karaoke.CurrentWordIndex}; "+
+                $"Line={_activeLyricIndex}; Word={_lyricMotion.CurrentWordIndex}; "+
                 $"LyricsProvider={_lyricResult.Source}; "+
                 $"LyricsQuality={_lyricResult.Quality}; "+
                 $"Lookup={_lyricsService.LastLookupMs:F1}ms");
