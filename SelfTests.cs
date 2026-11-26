@@ -1474,6 +1474,31 @@ public static class SelfTests
             }
             return true;
         });
+        Check("Updater: pins stable release tags and rejects unsafe or prerelease tags",()=>{
+            if(!SignedVisionSource.StableReleaseBase("v1.7.2").EndsWith("/v1.7.2/"))return false;
+            foreach(var tag in new[]{"v1.7.2-beta","v1.7.2/../","v1.7","1.7.2","v01.7.2","v1.7.2.0","latest"}){
+                try{SignedVisionSource.StableReleaseBase(tag);return false;}
+                catch(System.IO.InvalidDataException){}
+            }
+            return true;
+        });
+        Check("Updater: release asset must match signed name, size, tag URL and digest",()=>{
+            var a=new Velopack.VelopackAsset{
+                FileName="CharliVision.Desktop-1.7.2-full.nupkg",Size=123,
+                SHA256=new string('A',64)
+            };
+            var url=SignedVisionSource.StableReleaseBase("v1.7.2");
+            bool Match(string u,long size,string hash){
+                using var j=System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new[]{
+                    new{name=a.FileName,size,browser_download_url=u,digest="sha256:"+hash}
+                }));
+                return SignedVisionSource.PublishedAsset(j.RootElement,a,url);
+            }
+            return Match(url+a.FileName,123,a.SHA256) &&
+                !Match(url+a.FileName,124,a.SHA256) &&
+                !Match(url+a.FileName,123,new string('B',64)) &&
+                !Match(SignedVisionSource.StableReleaseBase("v1.7.1")+a.FileName,123,a.SHA256);
+        });
         Check("Updater: strict version checks and no automatic installation",()=>{
             return VisionUpdateService.IsNewer("1.0.0","1.0.1") &&
                 !VisionUpdateService.IsNewer("1.0.1","1.0.0") &&

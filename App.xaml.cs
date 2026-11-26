@@ -22,6 +22,27 @@ public partial class App : Application
     }
     protected override void OnStartup(StartupEventArgs e)
     {
+        if(Array.Exists(e.Args,x=>x.Equals("--update-feed-qa",StringComparison.OrdinalIgnoreCase))){
+            var report=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"CharliVision-feed-qa.txt");
+            try{
+                var result=System.Threading.Tasks.Task.Run(async ()=>{
+                    var source=new SignedVisionSource();
+                    var feed=await source.GetReleaseFeed(Velopack.Locators.VelopackLocator.Current.Log,SignedVisionSource.AppId,"win");
+                    var full=System.Linq.Enumerable.First(feed.Assets,a=>a.Type.ToString()=="Full");
+                    var delta=System.Linq.Enumerable.FirstOrDefault(feed.Assets,a=>a.Type.ToString()=="Delta");
+                    if(delta is not null){
+                        var path=System.IO.Path.GetTempFileName();
+                        try{
+                            await source.DownloadReleaseEntry(Velopack.Locators.VelopackLocator.Current.Log,delta,path,_=>{});
+                        }finally{System.IO.File.Delete(path);}
+                    }
+                    return "PASS: authenticated pinned public feed; full="+full.Version+
+                        "; delta download="+(delta is null?"not available":"verified");
+                }).GetAwaiter().GetResult();
+                System.IO.File.WriteAllText(report,result);
+            }catch(Exception ex){System.IO.File.WriteAllText(report,"FAIL: "+ex);Environment.ExitCode=1;}
+            Shutdown();return;
+        }
         var frameMode=Array.Find(e.Args,
             x=>x.StartsWith("--vinyl-frame-test",StringComparison.OrdinalIgnoreCase));
         if(frameMode is not null){
