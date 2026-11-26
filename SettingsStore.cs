@@ -41,6 +41,9 @@ public sealed class AppSettings
     public double AudioSmoothing { get; set; }=1;
     public double LyricsGlow { get; set; }=.55;
     public bool HighContrastLyrics { get; set; }=false;
+    // Auto preserves the previous album-color behavior for existing users.
+    // White or Black forces readable lyrics independently of wallpaper colors.
+    public string LyricsTextColor { get; set; }="Auto";
 }
 public static class SettingsStore
 {
@@ -76,6 +79,7 @@ public static class SettingsStore
         settings.AudioSensitivity=Math.Clamp(settings.AudioSensitivity,.5,2.5);
         settings.AudioSmoothing=Math.Clamp(settings.AudioSmoothing,.5,2.5);
         settings.LyricsGlow=Math.Clamp(settings.LyricsGlow,0,1);
+        settings.LyricsTextColor=LyricsTextColorMode.Normalize(settings.LyricsTextColor);
         return settings;
     }
     public static void Save(AppSettings settings)

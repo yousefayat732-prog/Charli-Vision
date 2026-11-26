@@ -79,6 +79,7 @@ public partial class MainWindow : Window
     private bool _lastRenderedReducedMotion;
     private bool _lastRenderedWordAnimation=true;
     private bool _lastHighContrast;
+    private string _lastLyricsTextColor="Auto";
     private bool _forceThemeRefresh=true;
 
     public MainWindow()
@@ -737,21 +738,22 @@ public partial class MainWindow : Window
             Math.Abs(a.R-prior.R)+Math.Abs(a.G-prior.G)+Math.Abs(a.B-prior.B)<5)return;
         _forceThemeRefresh=false;
         _appliedPalette=palette;
-        var color=_settings.HighContrastLyrics?Colors.White:
-            AlbumPalette.Mix(Colors.White,palette.Highlight,.55);
+        var color=LyricsTextColorMode.Primary(_settings.LyricsTextColor,
+            palette,_settings.HighContrastLyrics);
         var primary=new SolidColorBrush(color);primary.Freeze();
         ActiveLyric.Foreground=primary;
-        var quiet=_settings.HighContrastLyrics?
-            Color.FromRgb(224,232,241):
-            AlbumPalette.Mix(Color.FromRgb(175,182,192),palette.Secondary,.20);
+        var quiet=LyricsTextColorMode.Secondary(_settings.LyricsTextColor,
+            palette,_settings.HighContrastLyrics);
         var muted=new SolidColorBrush(quiet);muted.Freeze();
         PreviousLyric.Foreground=muted;
         NextLyric.Foreground=muted;
         PlainLyricsText.Foreground=primary;
+        _karaoke.TextColorMode=_settings.LyricsTextColor;
         _karaoke.ApplyTheme(palette);
         _karaoke.GlowStrength=_settings.LyricsGlow;
         if(ActiveLyric.Effect is DropShadowEffect glow){
-            glow.Color=palette.Accent;
+            glow.Color=LyricsTextColorMode.IsManual(_settings.LyricsTextColor)?
+                color:palette.Accent;
             glow.Opacity=KaraokeWords.VisualGlowOpacity(_settings.LyricsGlow);
         }
     }
@@ -1186,9 +1188,13 @@ public partial class MainWindow : Window
         Vinyl.SmoothingFactor=_settings.AudioSmoothing;
         _audio.Sensitivity=_settings.AudioSensitivity;
         _karaoke.ReducedMotion=_settings.ReducedMotion || !_settings.WordAnimationEnabled;
-        if(_lastHighContrast!=_settings.HighContrastLyrics){
+        string lyricsColor=LyricsTextColorMode.Normalize(_settings.LyricsTextColor);
+        if(_lastHighContrast!=_settings.HighContrastLyrics ||
+            _lastLyricsTextColor!=lyricsColor){
             _lastHighContrast=_settings.HighContrastLyrics;
+            _lastLyricsTextColor=lyricsColor;
             _karaoke.HighContrast=_lastHighContrast;
+            _karaoke.TextColorMode=lyricsColor;
             _forceThemeRefresh=true;
             _activeLyricIndex=-100;
             if(_lines.Count>0)UpdateLyrics();

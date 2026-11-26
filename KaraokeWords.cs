@@ -29,6 +29,9 @@ public sealed class KaraokeWords
     private bool _reducedMotion;
     private AlbumPalette? _lastAppliedTheme;
     private bool _lastAppliedHighContrast;
+    private string _lastAppliedTextColor="Auto";
+    private string _textColor="Auto";
+    public string TextColorMode {get=>_textColor;set=>_textColor=LyricsTextColorMode.Normalize(value);}
     private double _glowStrength=.54;
     public double SizeScale {get;set;}=1;
     public bool HighContrast {get;set;}
@@ -100,24 +103,34 @@ public sealed class KaraokeWords
         // Album transitions can deliver identical quantized colors for many
         // compositor frames. Reuse the frozen brushes and glyph layout.
         if(_lastAppliedTheme is AlbumPalette last && last==palette &&
-            _lastAppliedHighContrast==HighContrast)return;
+            _lastAppliedHighContrast==HighContrast &&
+            _lastAppliedTextColor==_textColor)return;
         _lastAppliedTheme=palette;
         _lastAppliedHighContrast=HighContrast;
-        _pending=HighContrast?
+        _lastAppliedTextColor=_textColor;
+        _pending=_textColor=="Black"?Brush(Color.FromRgb(76,76,76)):
+            _textColor=="White"?Brush(Color.FromRgb(223,223,223)):
+            HighContrast?
             Brush(Color.FromRgb(226,231,239)):
             Brush(AlbumPalette.Mix(Color.FromRgb(185,187,194),
                 palette.Secondary,.11));
-        _past=HighContrast?
-            Brush(Color.FromRgb(253,252,252)):
+        _past=_textColor=="Black"?Brush(Colors.Black):
+            _textColor=="White"?Brush(Colors.White):
+            HighContrast?Brush(Color.FromRgb(253,252,252)):
             Brush(AlbumPalette.Mix(Color.FromRgb(247,246,246),
                 palette.Highlight,.20));
-        var accent=AlbumPalette.Mix(Color.FromRgb(255,250,250),palette.Accent,.68);
-        var bright=AlbumPalette.Mix(Color.FromRgb(255,255,255),palette.Highlight,.50);
+        var accent=_textColor=="Black"?Colors.Black:
+            _textColor=="White"?Colors.White:
+            AlbumPalette.Mix(Color.FromRgb(255,250,250),palette.Accent,.68);
+        var bright=_textColor=="Black"?Colors.Black:
+            _textColor=="White"?Colors.White:
+            AlbumPalette.Mix(Color.FromRgb(255,255,255),palette.Highlight,.50);
         _sweepStart.Color=bright;
         _sweepFilled.Color=accent;
         _sweepPending.Color=_pending.Color;
         _sweepEnd.Color=_pending.Color;
-        _glow.Color=palette.Accent;
+        _glow.Color=_textColor=="Black"?Colors.Black:
+            _textColor=="White"?Colors.White:palette.Accent;
         // Preserve the current word and its progressive-fill position during
         // the album-color crossfade. Resetting these each frame made the word
         // repeatedly reinitialize and caused visible stuttering.
