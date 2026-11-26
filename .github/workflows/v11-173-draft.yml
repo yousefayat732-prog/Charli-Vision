@@ -1,0 +1,71 @@
+name: V11 1.7.3 reviewed release draft
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/v11-consistent-release-feed]
+    paths: ['.github/workflows/v11-173-draft.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  stage:
+    if: github.repository == 'yousefayat732-prog/Charli-Vision' && github.ref == 'refs/heads/fix/v11-consistent-release-feed'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f08794128f66eddd3fdea7dd384511e7c5addc66
+      - name: Download the tested Windows candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: vision-unsigned-candidate
+          run-id: '45734609851'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/vision-tested
+      - name: Verify package and prepare legacy migration installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'vision-tested'
+          $stage = Join-Path $env:RUNNER_TEMP 'vision-release'
+          New-Item $stage -ItemType Directory | Out-Null
+          $index = Get-Content "$root/releases.win.json" -Raw | ConvertFrom-Json
+          $full = @($index.Assets | Where-Object {$_.Type -eq 'Full' -and $_.Version -eq '1.7.3'})
+          if ($full.Count -ne 1) { throw 'Missing candidate full package' }
+          foreach ($a in $index.Assets) {
+            if ($a.PackageId -ne 'CharliVision.Desktop' -or $a.Version -ne '1.7.3' -or $a.FileName -ne (Split-Path $a.FileName -Leaf)) { throw 'Unexpected asset' }
+            $package = Join-Path $root $a.FileName
+            if ((Get-FileHash $package).Hash -ne $a.SHA256 -or (Get-Item $package).Length -ne $a.Size) { throw 'Invalid package' }
+            Copy-Item $package $stage
+          }
+          $setup = [IO.Path]::GetFullPath("$root/CharliVision.Desktop-win-Setup.exe")
+          Copy-Item $setup $stage
+          Copy-Item "$root/releases.win.json" $stage
+          $template = Get-Content installer/MigrationBridge.cs.txt -Raw
+          $source = Join-Path $stage 'MigrationBridge.cs'
+          [IO.File]::WriteAllText($source,$template.Replace('__VERSION__','1.7.3'),[Text.UTF8Encoding]::new($false))
+          $bridge = Join-Path $stage 'CharliVision-1.7.3-Setup-x64.exe'
+          $csc = "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+          $icon = [IO.Path]::GetFullPath((Join-Path $PWD.Path 'CharliVision.ico'))
+          & $csc /nologo /target:winexe /platform:x64 /optimize+ /reference:System.Windows.Forms.dll /reference:Microsoft.CSharp.dll "/win32icon:$icon" "/resource:$setup,VisionSetup" "/out:$bridge" $source
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge compiler failed' }
+          $manifest = [ordered]@{Version='1.7.3';FileName=(Split-Path $bridge -Leaf);Sha256=(Get-FileHash $bridge).Hash;Size=(Get-Item $bridge).Length}
+          [IO.File]::WriteAllText("$stage/CharliVision-update.json",($manifest|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+          Remove-Item $source
+      - name: Stage only, never publish unsigned metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'vision-release'
+          $tag = 'v1.7.3'
+          $commit = 'f08794128f66eddd3fdea7dd384511e7c5addc66'
+          $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) { throw 'Release already exists; refusing to modify it' }
+          gh release create $tag --repo $env:GITHUB_REPOSITORY --draft --target $commit --title "Charli Vision v1.7.3 - V11 Feed Reliability" --notes "Unpublished candidate. Publish only after local RSA-PSS signature and package digest verification."
+          if ($LASTEXITCODE -ne 0) { throw 'Draft creation failed' }
+          $files = @(Get-ChildItem $stage -File | ForEach-Object FullName)
+          gh release upload $tag --repo $env:GITHUB_REPOSITORY @files
+          if ($LASTEXITCODE -ne 0) { throw 'Draft upload failed' }
+          Write-Host 'REVIEWED_DRAFT_STAGED=PASS'
