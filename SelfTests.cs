@@ -145,6 +145,7 @@ public static class SelfTests
         Check("V6: before first real timestamp the next real line is visible",()=>{
             var host=new MainWindow();
             var lines=new []{
+                new LyricLine(TimeSpan.FromSeconds(3),""),
                 new LyricLine(TimeSpan.FromSeconds(7),"Upcoming genuine line"),
                 new LyricLine(TimeSpan.FromSeconds(12),"Next genuine line")
             };

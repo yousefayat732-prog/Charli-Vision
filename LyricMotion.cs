@@ -146,8 +146,18 @@ internal sealed class LyricMotion
         bool sameSource = ReferenceEquals(_source, lines);
         if (!sameSource) Clear();
         _source = lines;
-        int first = Math.Max(0, index - VisibleRadius);
-        int last = Math.Min(lines.Count - 1, index + VisibleRadius);
+        int anchor = index;
+        if (index < 0)
+        {
+            // Some LRCs start with a timestamped blank cue. Preview the first
+            // real text without assigning that cue the active role.
+            int upcoming = 0;
+            while (upcoming < lines.Count && string.IsNullOrWhiteSpace(lines[upcoming].Text))
+                upcoming++;
+            anchor = upcoming - 1;
+        }
+        int first = Math.Max(0, anchor - VisibleRadius);
+        int last = Math.Min(lines.Count - 1, anchor + VisibleRadius);
         var previous = _active;
         _active = index >= 0 ? Prepare(lines, index) : null;
         if (previous != _active)
@@ -168,7 +178,7 @@ internal sealed class LyricMotion
             double edge = FocusY + direction * (_active == null ? 20 : _active.Height * center.Scale / 2);
             for (int distance = 1; distance <= VisibleRadius; distance++)
             {
-                int lineIndex = index + direction * distance;
+                int lineIndex = anchor + direction * distance;
                 if (lineIndex < first || lineIndex > last) break;
                 var row = _rows[lineIndex % _rows.Length];
                 double scale = SizeAt(row, distance);
@@ -199,7 +209,7 @@ internal sealed class LyricMotion
         _duration = duration;
         HasVisibleText = _active != null
             ? !string.IsNullOrWhiteSpace(_active.Text.Text)
-            : last >= first && !string.IsNullOrWhiteSpace(lines[first].Text);
+            : anchor + 1 < lines.Count;
     }
 
     private Row Prepare(IReadOnlyList<LyricLine> lines, int index)
@@ -232,7 +242,7 @@ internal sealed class LyricMotion
     internal void PrepareNextEdge(IReadOnlyList<LyricLine> lines, int activeIndex)
     {
         int index = activeIndex + Radius;
-        if (ReferenceEquals(_source, lines) && index < lines.Count)
+        if (ReferenceEquals(_source, lines) && activeIndex >= 0 && index < lines.Count)
             Prepare(lines, index);
     }
 
