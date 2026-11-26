@@ -571,6 +571,10 @@ public partial class SettingsWindow : Window
         Toggle(colors,"Automatische Albumfarben aktivieren",
             _settings.AlbumColorsEnabled,v=>_settings.AlbumColorsEnabled=v,
             "Ohne Musik wird eine neutrale dunkel-silberne Palette verwendet.");
+        Toggle(colors,"Weiche Lyrics-Atmosphäre",_settings.LyricsAtmosphereEnabled,
+            v=>_settings.LyricsAtmosphereEnabled=v);
+        Slider(colors,"Atmosphäre-Intensität",_settings.LyricsAtmosphereStrength,
+            0,.65,.05,"",v=>_settings.LyricsAtmosphereStrength=v);
         var vinyl=Card("◎  Vinyl-Material","Feine Rillen und hochwertige Reflexionen aus dem vorhandenen Renderer.");
         Choice(vinyl,"Qualitätsprofil",
             new[]{("Ultra Light","UltraLight"),("Balanced","Balanced"),("Cinematic","Cinematic")},
@@ -705,12 +709,11 @@ public partial class SettingsWindow : Window
                 }
                 RefreshUpdates();
                 if(!VisionUpdateService.Shared.CanInstall)return;
-                state.Text="Signierten Installer laden und prüfen …";
+                state.Text="Signiertes Velopack-Paket laden und prüfen …";
                 var report=new Progress<(long received,long total)>(value=>{
                     if(value.total>0)
                         progress.Value=Math.Clamp(value.received*100d/value.total,0,100);
-                    progressLabel.Text=$"{value.received/1048576d:F1} / "+
-                        $"{value.total/1048576d:F1} MB";
+                    progressLabel.Text=$"{value.received} %";
                 });
                 bool started=await VisionUpdateService.Shared.DownloadAndStartInstallerAsync(report);
                 RefreshUpdates();

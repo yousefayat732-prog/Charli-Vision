@@ -7,10 +7,11 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>CharliVision</AssemblyName>
-    <Version>1.6.0</Version>
-    <AssemblyVersion>1.6.0.0</AssemblyVersion>
-    <FileVersion>1.6.0.0</FileVersion>
+    <Version>1.7.0</Version>
+    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <FileVersion>1.7.0.0</FileVersion>
     <ApplicationIcon>CharliVision.ico</ApplicationIcon>
+    <StartupObject>CharliVision.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <!-- Installed Python runtime is optional and must never be compiled or bundled into WPF. -->
@@ -19,6 +20,7 @@
     <None Remove="LocalAlignment\**\*" />
     <EmbeddedResource Remove="LocalAlignment\**\*" />
     <Resource Include="CharliVision.ico" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>

@@ -84,6 +84,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var mask=AtmosphereMask.Create();
+        LyricsAtmosphere.OpacityMask=mask;
+        LyricsAtmosphereSecondary.OpacityMask=mask;
+        LyricsAtmosphere.Background=new SolidColorBrush(Color.FromRgb(52,99,130));
+        LyricsAtmosphereSecondary.Background=new SolidColorBrush(Color.FromRgb(65,137,145));
+        LyricsAtmosphere.RenderTransform=new TranslateTransform();
+        LyricsAtmosphereSecondary.RenderTransform=new TranslateTransform();
         if(Enum.TryParse<VinylQuality>(_settings.VinylQuality,true,out var quality))
             Vinyl.SetQuality(quality);
         Vinyl.CoverRotates=_settings.CoverRotates;
@@ -268,8 +275,15 @@ public partial class MainWindow : Window
                 ClearLyrics();
                 if(result.Quality=="Plain" && _settings.PlainLyricsReader)
                     ShowPlainLyrics();
-                if(result.Quality=="Keine" && _settings.AutoLyricsSearch)
-                    _=ScheduleLyricsRecoveryAsync(state,identity,token,result.Status);
+                if(result.Quality=="Keine" && _settings.AutoLyricsSearch){
+                    ShowUnavailableLyrics(result.Status);
+                    if(result.Status!="Instrumentaltitel")
+                        _=ScheduleLyricsRecoveryAsync(state,identity,token,result.Status);
+                }else if(result.Quality=="Plain" && _lyricsService.LastCacheHit &&
+                    !force && _settings.AutoLyricsSearch){
+                    // Existing cache remains visible during the refresh.
+                    _=RefreshCachedPlainAsync(state,identity,token);
+                }
             }else {
                 UpdateLyrics(); // First usable line must appear without waiting for word upgrades.
                 if(!result.Lines.Any(line=>line.Words is {Count:>0})){
@@ -290,12 +304,35 @@ public partial class MainWindow : Window
               if(!token.IsCancellationRequested&&_displayKey==identity){
                   _lyricsPipelineState="ProviderError";
                   _lyricsLastError=ex.GetType().Name;
-                  ClearLyrics();
+                  if(!LyricsRendererVisible){
+                      ClearLyrics();
+                      if(_settings.AutoLyricsSearch)
+                          ShowUnavailableLyrics("Lyrics-Anbieter derzeit nicht erreichbar");
+                  }
                   if(_settings.AutoLyricsSearch)
                       _=ScheduleLyricsRecoveryAsync(state,identity,token,
                           "Lyrics-Anbieter derzeit nicht erreichbar");
               }
           }
+    }
+    private void ShowUnavailableLyrics(string status)
+    {
+        LyricsStack.Visibility=Visibility.Collapsed;
+        LyricsUnavailable.Text=status=="Instrumentaltitel"?
+            "Instrumentaltitel — kein Gesang":
+            "Keine passenden Lyrics verfügbar. Rechtsklick für Suche oder Import.";
+        LyricsUnavailable.Visibility=Visibility.Visible;
+        TitleRegion.Visibility=Visibility.Visible;
+    }
+    private async Task RefreshCachedPlainAsync(TrackState state,string identity,CancellationToken token)
+    {
+        try{
+            // Give cached text instant priority; seek a verified upgrade in
+            // the background only once per active track.
+            await Task.Delay(TimeSpan.FromSeconds(2),token);
+            if(_closing || token.IsCancellationRequested || _displayKey!=identity)return;
+            await LoadLyricsAsync(state,identity,token,force:true);
+        }catch(OperationCanceledException){}
     }
     private async Task ScheduleLyricsRecoveryAsync(TrackState state,string identity,
         CancellationToken token,string status)
@@ -515,7 +552,12 @@ public partial class MainWindow : Window
         _karaoke.Clear();
         _plainReaderElapsed=0;
         _plainScrollPrevious=0;
-        PlainLyricsText.Text=plain.Length>16000?plain[..16000]:plain;
+        FarPreviousLyric.Visibility=Visibility.Collapsed;
+        FarNextLyric.Visibility=Visibility.Collapsed;
+        LyricsStack.RenderTransform=Transform.Identity;
+        LyricsUnavailable.Visibility=Visibility.Collapsed;
+        LyricsStack.Visibility=Visibility.Collapsed;
+        PlainLyricsText.Text=plain;
         PlainLyricsReader.ScrollToTop();
         PlainLyricsReader.Visibility=Visibility.Visible;
         ActiveLyric.Visibility=Visibility.Collapsed;
@@ -549,9 +591,15 @@ public partial class MainWindow : Window
     {
         if(resetIndex)_activeLyricIndex=-100;
         TitleRegion.Visibility=Visibility.Collapsed;
+        LyricsUnavailable.Visibility=Visibility.Collapsed;
+        LyricsUnavailable.Text="";
+        LyricsStack.Visibility=Visibility.Visible;
         PlainLyricsReader.Visibility=Visibility.Collapsed;
         PlainLyricsText.Text="";
         _plainReaderElapsed=0;_plainScrollPrevious=0;
+        FarPreviousLyric.Text="";FarPreviousLyric.Visibility=Visibility.Collapsed;
+        FarNextLyric.Text="";FarNextLyric.Visibility=Visibility.Collapsed;
+        LyricsStack.RenderTransform=Transform.Identity;
         PreviousLyric.Visibility=Visibility.Visible;
         NextLyric.Visibility=Visibility.Visible;
         PreviousLyric.Text="";
@@ -565,7 +613,7 @@ public partial class MainWindow : Window
     private static void AnimateLyricEntrance(UIElement element,
         double fromY,double opacity,double durationMs)
     {
-        var duration=TimeSpan.FromMilliseconds(Math.Clamp(durationMs,45,210));
+        var duration=TimeSpan.FromMilliseconds(Math.Clamp(durationMs,45,450));
         var ease=new QuadraticEase{EasingMode=EasingMode.EaseOut};
         var slide=new TranslateTransform(0,fromY);
         element.RenderTransform=slide;
@@ -580,12 +628,12 @@ public partial class MainWindow : Window
     // Tempo only affects visual transition duration, never word/line selection.
     internal static double LineTransitionMs(double forwardGap,double backwardGap,double? bpm)
     {
-        double milliseconds=Math.Min(forwardGap,backwardGap)*.16;
+        double milliseconds=Math.Min(forwardGap,backwardGap)*.28;
         if(bpm is double reliable && double.IsFinite(reliable)){
             if(reliable>=140)milliseconds*=.84;
             else if(reliable<=80)milliseconds*=1.12;
         }
-        return Math.Clamp(milliseconds,55,190);
+        return Math.Clamp(milliseconds,55,420);
     }
     private void ShowUpcomingSourceLine()
     {
@@ -601,6 +649,11 @@ public partial class MainWindow : Window
         PreviousLyric.Visibility=Visibility.Collapsed;
         PreviousLyric.Text="";
         NextLyric.Visibility=Visibility.Visible;
+        FarPreviousLyric.Visibility=Visibility.Collapsed;
+        FarNextLyric.Visibility=Visibility.Collapsed;
+        LyricsStack.RenderTransform=Transform.Identity;
+        LyricsUnavailable.Visibility=Visibility.Collapsed;
+        LyricsStack.Visibility=Visibility.Visible;
         NextLyric.Text=first;
         NextLyric.FontSize=(first.Length>75?17:22)*_settings.LyricsScale;
         NextLyric.Opacity=.64;
@@ -625,6 +678,18 @@ public partial class MainWindow : Window
                 _karaoke.Update(position.Value);
             return;
         }
+        int oldIndex=_activeLyricIndex;
+        double? oldFocus=null;
+        if(oldIndex>=0 && Math.Abs(oldIndex-index)==1 && IsLoaded){
+            try{
+                var arriving=index>oldIndex?NextLyric:PreviousLyric;
+                if(arriving.IsVisible)
+                    oldFocus=arriving.TranslatePoint(new Point(0,arriving.ActualHeight/2),
+                        TitleRegion).Y;
+            }catch(InvalidOperationException){}
+        }
+        LyricsUnavailable.Visibility=Visibility.Collapsed;
+        LyricsStack.Visibility=Visibility.Visible;
         _activeLyricIndex=index;
         string current=index<0?"":_lines[index].Text;
         if(string.IsNullOrWhiteSpace(current)){
@@ -637,6 +702,20 @@ public partial class MainWindow : Window
         NextLyric.Visibility=Visibility.Visible;
         PreviousLyric.Text=previous;
         NextLyric.Text=next;
+        // Additional quiet context only if the main lines leave room.
+        // Never sacrifice the visible current lyric for decorative context.
+        string farPrevious=index>1?_lines[index-2].Text:"";
+        string farNext=index+2<_lines.Count?_lines[index+2].Text:"";
+        bool context=current.Length<70 && previous.Length<80 && next.Length<80 &&
+            _settings.LyricsScale<=1.10;
+        void Context(System.Windows.Controls.TextBlock block,string line){
+            block.Text=context && line.Length<=65?line:"";
+            block.Visibility=string.IsNullOrWhiteSpace(block.Text)?
+                Visibility.Collapsed:Visibility.Visible;
+            block.FontSize=16*_settings.LyricsScale;
+        }
+        Context(FarPreviousLyric,farPrevious);
+        Context(FarNextLyric,farNext);
         PreviousLyric.FontSize=(previous.Length>75?17:22)*_settings.LyricsScale;
         NextLyric.FontSize=(next.Length>75?17:22)*_settings.LyricsScale;
         TitleRegion.Visibility=Visibility.Visible;
@@ -662,8 +741,10 @@ public partial class MainWindow : Window
         // Rapid lyrics get a short transition. The correct word is already
         // selected before animation begins, avoiding delayed highlighting.
         double timeMs=LineTransitionMs(forwardGap,backwardGap,_tempo.EstimatedBpm);
-        // On fast tracks transitions shorten, never delaying word timestamps.
-        if(_settings.ReducedMotion){
+        // One coordinated vertical movement. Seeks/reloads snap to the real cue;
+        // adjacent cues animate without delaying word selection.
+        if(_settings.ReducedMotion || oldIndex<0 || Math.Abs(oldIndex-index)!=1){
+            LyricsStack.RenderTransform=Transform.Identity;
             ActiveLyric.BeginAnimation(OpacityProperty,null);
             ActiveLyric.Opacity=1;
             ActiveLyric.RenderTransform=Transform.Identity;
@@ -675,26 +756,31 @@ public partial class MainWindow : Window
             WordLyricPanel.Opacity=1;
             WordLyricPanel.RenderTransform=Transform.Identity;
         }else {
-            if(!wordTiming){
-                ActiveLyric.BeginAnimation(OpacityProperty,new DoubleAnimation(.5,1,
-                    TimeSpan.FromMilliseconds(timeMs)));
-                var movement=new TranslateTransform(0,7);
-                ActiveLyric.RenderTransform=movement;
-                movement.BeginAnimation(TranslateTransform.YProperty,new DoubleAnimation(7,0,
-                    TimeSpan.FromMilliseconds(timeMs)) {
-                    EasingFunction=new QuadraticEase{EasingMode=EasingMode.EaseOut}
-                });
+            ActiveLyric.BeginAnimation(OpacityProperty,null);
+            ActiveLyric.Opacity=1;ActiveLyric.RenderTransform=Transform.Identity;
+            WordLyricPanel.BeginAnimation(OpacityProperty,null);
+            WordLyricPanel.Opacity=1;WordLyricPanel.RenderTransform=Transform.Identity;
+            PreviousLyric.BeginAnimation(OpacityProperty,null);
+            PreviousLyric.Opacity=_settings.HighContrastLyrics?.88:.62;
+            PreviousLyric.RenderTransform=Transform.Identity;
+            NextLyric.BeginAnimation(OpacityProperty,null);
+            NextLyric.Opacity=_settings.HighContrastLyrics?.88:.64;
+            NextLyric.RenderTransform=Transform.Identity;
+            LyricsStack.RenderTransform=Transform.Identity;
+            double offset=index>oldIndex?84:-84;
+            if(oldFocus is double prior && IsLoaded){
+                // Reconcile actual line positions once per cue, never per frame.
+                TitleRegion.UpdateLayout();
+                var slot=ActiveLyricsSlot.TranslatePoint(
+                    new Point(0,ActiveLyricsSlot.ActualHeight/2),TitleRegion);
+                offset=Math.Clamp(prior-slot.Y,-150,150);
             }
-            if(wordTiming)
-                AnimateLyricEntrance(WordLyricPanel,6,1,timeMs);
-            else{
-                WordLyricPanel.BeginAnimation(OpacityProperty,null);
-                WordLyricPanel.RenderTransform=Transform.Identity;
-            }
-            AnimateLyricEntrance(PreviousLyric,-3,
-                _settings.HighContrastLyrics?.88:.62,timeMs*.8);
-            AnimateLyricEntrance(NextLyric,3,
-                _settings.HighContrastLyrics?.88:.64,timeMs*.8);
+            var movement=new TranslateTransform(0,offset);
+            LyricsStack.RenderTransform=movement;
+            movement.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(offset,0,TimeSpan.FromMilliseconds(timeMs)){
+                    EasingFunction=new CubicEase{EasingMode=EasingMode.EaseOut}
+                },HandoffBehavior.SnapshotAndReplace);
         }
     }
     private void SetChromaticTarget(AlbumPalette palette)
@@ -747,6 +833,12 @@ public partial class MainWindow : Window
         var muted=new SolidColorBrush(quiet);muted.Freeze();
         PreviousLyric.Foreground=muted;
         NextLyric.Foreground=muted;
+        FarPreviousLyric.Foreground=muted;
+        FarNextLyric.Foreground=muted;
+        if(LyricsAtmosphere.Background is SolidColorBrush ambient)
+            ambient.Color=palette.Accent;
+        if(LyricsAtmosphereSecondary.Background is SolidColorBrush diffuse)
+            diffuse.Color=palette.Secondary;
         PlainLyricsText.Foreground=primary;
         _karaoke.ApplyTheme(palette);
         _karaoke.GlowStrength=_settings.LyricsGlow;
@@ -816,6 +908,20 @@ public partial class MainWindow : Window
         }
         Vinyl.Tick(dt,levels);
         if(_forceThemeRefresh)ApplyTheme();
+        LyricsAtmosphere.Opacity=_settings.LyricsAtmosphereEnabled?
+            _settings.LyricsAtmosphereStrength*
+                (_settings.ReducedMotion||!_playing?.93:.93+.07*Math.Sin(now*.72)):0;
+        // Slowly move the gradient origin (no bitmap processing or blur pass).
+        LyricsAtmosphereSecondary.Opacity=_settings.LyricsAtmosphereEnabled?
+            _settings.LyricsAtmosphereStrength*.60:0;
+        if(_settings.LyricsAtmosphereEnabled && !_settings.ReducedMotion && _playing){
+            if(LyricsAtmosphere.RenderTransform is TranslateTransform a){
+                a.X=12*Math.Sin(now*.23);a.Y=9*Math.Cos(now*.19);
+            }
+            if(LyricsAtmosphereSecondary.RenderTransform is TranslateTransform b){
+                b.X=15*Math.Cos(now*.17);b.Y=11*Math.Sin(now*.21);
+            }
+        }
         UpdatePlainReader(dt);
         UpdateLyrics();
         if(_v6CaptureMode && !_v6CaptureTaken && LyricsRendererVisible)

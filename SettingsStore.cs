@@ -41,11 +41,18 @@ public sealed class AppSettings
     public double AudioSmoothing { get; set; }=1;
     public double LyricsGlow { get; set; }=.55;
     public bool HighContrastLyrics { get; set; }=false;
+    public bool LyricsAtmosphereEnabled { get; set; }=true;
+    public double LyricsAtmosphereStrength { get; set; }=.30;
 }
 public static class SettingsStore
 {
     public static readonly string DirectoryPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CharliVision");
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+#if VISION_UPDATE_QA
+        "CharliVision-V11-QA");
+#else
+        "CharliVision");
+#endif
     public static readonly string FilePath = Path.Combine(DirectoryPath, "settings.json");
 
     public static AppSettings Load()
@@ -76,6 +83,8 @@ public static class SettingsStore
         settings.AudioSensitivity=Math.Clamp(settings.AudioSensitivity,.5,2.5);
         settings.AudioSmoothing=Math.Clamp(settings.AudioSmoothing,.5,2.5);
         settings.LyricsGlow=Math.Clamp(settings.LyricsGlow,0,1);
+        settings.LyricsAtmosphereStrength=double.IsFinite(settings.LyricsAtmosphereStrength)?
+            Math.Clamp(settings.LyricsAtmosphereStrength,0,.65):.30;
         return settings;
     }
     public static void Save(AppSettings settings)

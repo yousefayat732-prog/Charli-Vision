@@ -84,7 +84,11 @@ public partial class App : Application
             if(!okay)Environment.ExitCode=1;
             Shutdown();return;
         }
+        #if VISION_UPDATE_QA
+        _instanceMutex = new Mutex(true,@"Local\CharliVisionV11QA",out _ownsMutex);
+#else
         _instanceMutex = new Mutex(true,@"Local\CharliVisionStandaloneApp",out _ownsMutex);
+#endif
         if (!_ownsMutex) { Shutdown(); return; }
         base.OnStartup(e);
         // Opt-in visual QA; normal launches never open the settings automatically.
@@ -94,7 +98,10 @@ public partial class App : Application
            Array.Exists(e.Args,x=>x.StartsWith("--settings-capture",StringComparison.OrdinalIgnoreCase)))
             Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                 if(MainWindow is MainWindow overlay){
-                    if(Array.Exists(e.Args,x=>x.Equals("--settings-preview-keys",
+                    if(Array.Exists(e.Args,x=>x.Equals("--settings-preview-app",
+                        StringComparison.OrdinalIgnoreCase)))
+                        overlay.OpenAdvancedSettings("App");
+                    else if(Array.Exists(e.Args,x=>x.Equals("--settings-preview-keys",
                         StringComparison.OrdinalIgnoreCase)))
                         overlay.OpenAdvancedSettings("Keys");
                     else if(Array.Exists(e.Args,x=>x.StartsWith("--settings-capture",

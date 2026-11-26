@@ -111,8 +111,8 @@ public sealed class KaraokeWords
             Brush(Color.FromRgb(253,252,252)):
             Brush(AlbumPalette.Mix(Color.FromRgb(247,246,246),
                 palette.Highlight,.20));
-        var accent=AlbumPalette.Mix(Color.FromRgb(255,250,250),palette.Accent,.68);
-        var bright=AlbumPalette.Mix(Color.FromRgb(255,255,255),palette.Highlight,.50);
+        var accent=AlbumPalette.Mix(Color.FromRgb(255,250,250),palette.Accent,.18);
+        var bright=AlbumPalette.Mix(Color.FromRgb(255,255,255),palette.Highlight,.12);
         _sweepStart.Color=bright;
         _sweepFilled.Color=accent;
         _sweepPending.Color=_pending.Color;

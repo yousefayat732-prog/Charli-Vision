@@ -39,6 +39,7 @@ public sealed class LyricsService : IDisposable
     private readonly HashSet<string> _wordUpgradeSearched=new();
     private DateTimeOffset _lrclibRetryAfter,_ovhRetryAfter,_betterLyricsRetryAfter;
     private readonly LyricsLibrary _library;
+    private readonly PersistentLyricsCache? _diskCache;
     public LyricsLibrary Library=>_library;
     public double LastLookupMs{get;private set;}
     public double LastUpgradeMs{get;private set;}
@@ -64,8 +65,13 @@ public sealed class LyricsService : IDisposable
         RegexOptions.IgnoreCase|RegexOptions.Compiled|RegexOptions.CultureInvariant);
 
     public LyricsService(HttpMessageHandler? transport=null,LyricsLibrary? library=null)
+        :this(transport,library,null){}
+    internal LyricsService(HttpMessageHandler? transport,LyricsLibrary? library,
+        PersistentLyricsCache? diskCache)
     {
         _library=library??new LyricsLibrary();
+        _diskCache=diskCache??(transport is null && library is null?
+            new PersistentLyricsCache(Path.Combine(SettingsStore.DirectoryPath,"LyricsCacheV10")):null);
         _http=transport is null?new HttpClient():new HttpClient(transport);
         _http.Timeout=TimeSpan.FromSeconds(8);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("CharliVision/1.5");
@@ -90,6 +96,7 @@ public sealed class LyricsService : IDisposable
             _alreadySearched.Remove(songKey);
             _wordUpgradeSearched.Remove(songKey);
         }
+        // Keep the last positive result for offline fallback on a forced rescan.
     }
     private void Remember(string key,LyricResult result)
     {
@@ -103,6 +110,7 @@ public sealed class LyricsService : IDisposable
             _cache[key]=new CacheEntry(result,DateTimeOffset.UtcNow+ttl);
             while(_cache.Count>40 && _order.Count>0)_cache.Remove(_order.Dequeue());
         }
+        _diskCache?.Write(key,result);
     }
     private void RememberChoices(string key,IReadOnlyList<LyricAlternative> candidates)
     {
@@ -163,6 +171,13 @@ public sealed class LyricsService : IDisposable
                 }
             }
         }
+        // Read the previous positive match independently of the network.
+        // Explicit retry can seek a better version without losing offline text.
+        var persisted=_diskCache?.Read(key);
+        if(!force && persisted is not null){
+            LastCacheHit=true;LastLookupMs=0;LastProviderAttempts=0;
+            SetStatus(persisted);return persisted;
+        }
         LastCacheHit=false;
         var watch=Stopwatch.StartNew();
         await _requests.WaitAsync(token);
@@ -181,6 +196,9 @@ public sealed class LyricsService : IDisposable
             var result=await SearchAsync(title,artist,album,duration,key,token);
             token.ThrowIfCancellationRequested();
             LastLookupMs=watch.Elapsed.TotalMilliseconds;
+            if(persisted is not null && QualityScore(persisted.Quality)>QualityScore(result.Quality)){
+                LastCacheHit=true;SetStatus(persisted);return persisted;
+            }
             Remember(key,result);SetStatus(result);
             return result;
         }finally{_requests.Release();}
@@ -189,7 +207,7 @@ public sealed class LyricsService : IDisposable
         TimeSpan? duration,string key,CancellationToken token)
     {
         LyricResult? best=null;
-        LyricResult? similarPlain=null;
+
         bool lrclibError=false;
         if(DateTimeOffset.UtcNow>=_lrclibRetryAfter) {
             int chosen=_library.SelectedId(key);
@@ -234,8 +252,7 @@ public sealed class LyricsService : IDisposable
                 using var search=await FetchJson(url,"LRCLIB",token);
                 MarkSearched(key);
                 if(search?.RootElement.ValueKind==JsonValueKind.Array){
-                    similarPlain=SimilarVersionAsPlain(search.RootElement,
-                        title,artist,duration);
+
                     var found=RankAlternatives(search.RootElement,title,artist,album,duration);
                     RememberChoices(key,found);
                     var ordered=found.OrderByDescending(x=>QualityScore(x.Quality))
@@ -293,7 +310,7 @@ public sealed class LyricsService : IDisposable
                 _betterLyricsRetryAfter=DateTimeOffset.UtcNow.AddSeconds(30);
             }
         }
-        if(best is null && similarPlain is not null)best=similarPlain;
+
         if(best?.Quality=="Plain")return best;
 
         // lyrics.ovh is a public plain-lyrics API; it provides no verified timing.
@@ -382,8 +399,8 @@ public sealed class LyricsService : IDisposable
             if(Normalize(PrimaryArtist(foundName))!=
                 Normalize(PrimaryArtist(artist)))continue;
             if(duration is {TotalSeconds:>1} &&
-                DoubleField(item,"duration") is double seconds &&
-                Math.Abs(seconds-duration.Value.TotalSeconds)>4.5)continue;
+                (DoubleField(item,"duration") is not double seconds ||
+                Math.Abs(seconds-duration.Value.TotalSeconds)>4.5))continue;
             // Never repeat the direct request or accept unrelated variants.
             if(string.Equals(foundTitle,title,StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(foundName,PrimaryArtist(artist),
@@ -430,8 +447,7 @@ public sealed class LyricsService : IDisposable
                 break;
             }
         }
-        return minimumQuality=="Keine"?
-            SimilarVersionAsPlain(doc.RootElement,title,artist,duration):null;
+        return null;
     }
     private sealed class ProviderCooldownException:Exception {}
     private async Task<JsonDocument?> FetchJson(string url,string provider,CancellationToken token)

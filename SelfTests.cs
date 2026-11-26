@@ -103,6 +103,34 @@ public static class SelfTests
             LyricsService.ActiveAt(lines,TimeSpan.FromSeconds(4))==2 && lines[2].Text=="");
         Check("Invalid LRC metadata is not displayed",() =>
             LyricsService.ParseLrc("[ar:Ignored]\n[not-a-time]not a cue").Count==0);
+        Check("V10: positive private cache survives a new instance; invalid and failed entries rejected",()=>{
+            var folder=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"cv-v10-cache-"+Guid.NewGuid().ToString("N"));
+            try{
+                var cache=new PersistentLyricsCache(folder);
+                string key=LyricsService.SongKey("Test Track","Test Artist","Test Album",TimeSpan.FromSeconds(180));
+                var hit=new LyricResult(new[]{new LyricLine(TimeSpan.FromSeconds(3),"Test cue")},"valid",true,"LRCLIB","Line");
+                cache.Write(key,hit);
+                var read=new PersistentLyricsCache(folder).Read(key);
+                cache.Write(key,LyricResult.Unavailable("temporary failure"));
+                cache.Write(key,hit with{Source="LRCLIB (ähnliche Version)"});
+                return read?.Lines.Count==1 && read.Lines[0].Text=="Test cue" &&
+                    cache.Read(key)?.Source=="LRCLIB" && cache.Read("../outside")==null &&
+                    cache.Read(LyricsService.SongKey("Other","Test Artist","Test Album",TimeSpan.FromSeconds(180)))==null;
+            }finally{if(System.IO.Directory.Exists(folder))System.IO.Directory.Delete(folder,true);}
+        });
+        Check("V10: persistent cache supports restart with no HTTP request",()=>{
+            var folder=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"cv-v10-offline-"+Guid.NewGuid().ToString("N"));
+            try{
+                var cache=new PersistentLyricsCache(folder);
+                var key=LyricsService.SongKey("Offline Sample","Sample Singer","Sample Album",TimeSpan.FromSeconds(180));
+                cache.Write(key,new LyricResult(new[]{new LyricLine(TimeSpan.FromSeconds(1),"Offline cue")},"valid",true,"LRCLIB","Line"));
+                var transport=new StubLyricsHttp((req,ct)=>System.Threading.Tasks.Task.FromResult(
+                    new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)));
+                using var service=new LyricsService(transport,new LyricsLibrary(System.IO.Path.Combine(folder,"imports")),cache);
+                var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync("Offline Sample","Sample Singer","Sample Album",TimeSpan.FromSeconds(180),CancellationToken.None)).GetAwaiter().GetResult();
+                return result.Quality=="Line" && service.LastCacheHit && transport.Calls==0;
+            }finally{if(System.IO.Directory.Exists(folder))System.IO.Directory.Delete(folder,true);}
+        });
         Check("V6: playback timeline arriving after metadata retries the right recording",()=>
             MediaController.NeedsDurationRefresh(null,TimeSpan.FromSeconds(187)) &&
             !MediaController.NeedsDurationRefresh(TimeSpan.FromSeconds(187),
@@ -881,7 +909,7 @@ public static class SelfTests
             return result.Quality=="Word"&&result.Lines.Count==1 &&
                 result.Lines[0].Words is {Count:2}&&stub.Calls==3;
         });
-        Check("Universal: modest duration mismatch shows plain, never wrong timestamps",()=>{
+        Check("V10: known different recording is rejected, even for plain text",()=>{
             string entries="[{\"id\":801,\"trackName\":\"November\","+
                 "\"artistName\":\"JM7\",\"duration\":202,"+
                 "\"plainLyrics\":\"A sample original verse\","+
@@ -896,24 +924,8 @@ public static class SelfTests
             var result=System.Threading.Tasks.Task.Run(()=>service.GetAsync(
                 "November","JM7","",TimeSpan.FromSeconds(190),
                 CancellationToken.None)).GetAwaiter().GetResult();
-            if(result.Quality!="Plain"||result.Synchronized||result.Lines.Count!=0||
-                !result.Source.Contains("ähnliche")||
-                result.PlainText!="A sample original verse")return false;
-            var host=new MainWindow();
-            typeof(MainWindow).GetField("_lyricResult",
-                System.Reflection.BindingFlags.Instance|
-                System.Reflection.BindingFlags.NonPublic)?.SetValue(host,result);
-            typeof(MainWindow).GetField("_plainLyrics",
-                System.Reflection.BindingFlags.Instance|
-                System.Reflection.BindingFlags.NonPublic)?.SetValue(host,result.PlainText);
-            typeof(MainWindow).GetMethod("ShowPlainLyrics",
-                System.Reflection.BindingFlags.Instance|
-                System.Reflection.BindingFlags.NonPublic)?.Invoke(host,null);
-            return host.TitleRegion.Visibility==System.Windows.Visibility.Visible&&
-                host.PlainLyricsReader.Visibility==System.Windows.Visibility.Visible&&
-                host.PlainLyricsText.Text.Contains("A sample original verse")&&
-                host.PreviousLyric.Text=="";
-
+            return result.Quality=="Keine" && !result.Synchronized &&
+                result.Lines.Count==0 && string.IsNullOrWhiteSpace(result.PlainText);
         });
         Check("Universal: large duration mismatch is rejected even as plain",()=>{
             var stub=new StubLyricsHttp((req,ct)=>{
@@ -1391,7 +1403,8 @@ public static class SelfTests
             double fast=MainWindow.LineTransitionMs(950,1100,151);
             double neutral=MainWindow.LineTransitionMs(950,1100,null);
             return quiet>neutral && neutral>fast && fast>=55 &&
-                quiet<=190 && MainWindow.LineTransitionMs(70,70,180)==55;
+                quiet<=420 && quiet>=200 && MainWindow.LineTransitionMs(70,70,180)==55 &&
+                MainWindow.LineTransitionMs(5000,5000,72)==420;
         });
         Check("V3 completion: karaoke highlight is glyph-bound and never overglows",()=>{
             var panel=new System.Windows.Controls.WrapPanel();

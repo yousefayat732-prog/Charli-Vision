@@ -1,23 +1,49 @@
-name: Windows build
+name: Windows candidate build
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/vision-v10-v11]
   pull_request:
+permissions:
+  contents: read
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Restore
-        run: dotnet restore CharliVision.csproj
-      - name: Build
-        run: dotnet build CharliVision.csproj --no-restore -c Release
-      - name: Publish
-        run: dotnet publish CharliVision.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/win-x64
+      - name: Restore and build
+        shell: pwsh
+        run: |
+          dotnet restore CharliVision.csproj
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build CharliVision.csproj -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish self-contained application
+        shell: pwsh
+        run: |
+          dotnet publish CharliVision.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o "${{ runner.temp }}/vision-publish"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Create candidate installer
+        shell: pwsh
+        run: |
+          dotnet tool install -g vpk --version 1.2.161
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          [xml]$project = Get-Content CharliVision.csproj
+          $version = [string]($project.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+          if (-not $version) { throw 'Missing project version' }
+          vpk pack -u CharliVision.Desktop -v $version -p "${{ runner.temp }}/vision-publish" -e CharliVision.exe -o "${{ runner.temp }}/vision-packages" -c win -r win-x64 --packTitle "Charli Vision" --packAuthors "Charli Vision"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $root = "${{ runner.temp }}/vision-packages"
+          $feed = Get-Content "$root/releases.win.json" -Raw | ConvertFrom-Json
+          foreach ($asset in $feed.Assets) {
+            $path = Join-Path $root $asset.FileName
+            if ((Get-FileHash $path).Hash -ne $asset.SHA256 -or (Get-Item $path).Length -ne $asset.Size) { throw 'Package verification failed' }
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: CharliVision-unsigned-windows-x64
-          path: dist/win-x64/CharliVision.exe
+          name: vision-unsigned-candidate
+          path: ${{ runner.temp }}/vision-packages
+          if-no-files-found: error

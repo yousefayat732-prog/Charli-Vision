@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Velopack;
 
 namespace CharliVision;
 
@@ -41,15 +42,16 @@ BiQPQcqQ6AzDvc1/db5JkFTDPzpIZFQcdSUqh4byR8EhAgMBAAE=
 -----END PUBLIC KEY-----";
     private readonly HttpClient _http=new() {Timeout=TimeSpan.FromMinutes(15)};
     private readonly SemaphoreSlim _gate=new(1,1);
-    private Offer? _offer;
+    private UpdateInfo? _update;
+    private UpdateManager? _manager;
     private DateTime _lastChecked=DateTime.MinValue;
     public string InstalledVersion =>
         typeof(VisionUpdateService).Assembly.GetName().Version?.ToString(3)??"1.0.0";
     public string AvailableVersion {get;private set;}="—";
     public string ReleaseNotes {get;private set;}="";
     public string Status {get;private set;}="Noch nicht nach Updates gesucht";
-    public bool CanInstall => _offer is not null;
-    public long InstallerBytes => _offer?.Manifest.Size??0;
+    public bool CanInstall => _update is not null;
+    public long InstallerBytes => _update?.TargetFullRelease.Size??0;
 
     private sealed record Manifest(string Version,string FileName,string Sha256,long Size);
     private sealed record Offer(Manifest Manifest,Uri Url);
@@ -102,7 +104,7 @@ BiQPQcqQ6AzDvc1/db5JkFTDPzpIZFQcdSUqh4byR8EhAgMBAAE=
         }
         return memory.ToArray();
     }
-    private static bool VerifySignedManifest(byte[] manifest,byte[] signatureBytes)
+    internal static bool VerifySignedManifest(byte[] manifest,byte[] signatureBytes)
     {
         try{
             byte[] signature=Convert.FromBase64String(
@@ -116,133 +118,55 @@ BiQPQcqQ6AzDvc1/db5JkFTDPzpIZFQcdSUqh4byR8EhAgMBAAE=
     }
     public async Task CheckAsync(bool force=false,CancellationToken token=default)
     {
-        // Explicit user-initiated checks wait for a concurrent background check;
-        // silently returning here made the Update button appear unresponsive.
         if(force)await _gate.WaitAsync(token);
         else if(!await _gate.WaitAsync(0,token))return;
         try{
-            if(!force && DateTime.UtcNow-_lastChecked<TimeSpan.FromHours(18))
+            if(!force && DateTime.UtcNow-_lastChecked<TimeSpan.FromHours(18))return;
+            _update=null;AvailableVersion="—";ReleaseNotes="";
+            Status="Signierten Velopack-Updatekanal prüfen …";
+            var manager=new UpdateManager(new SignedVisionSource());
+            if(!manager.IsInstalled || manager.AppId!=SignedVisionSource.AppId){
+                Status="Einmalige Velopack-Migration erforderlich.";
                 return;
+            }
+            token.ThrowIfCancellationRequested();
+            var found=await manager.CheckForUpdatesAsync();
+            token.ThrowIfCancellationRequested();
             _lastChecked=DateTime.UtcNow;
-            _offer=null;
-            AvailableVersion="—";
-            ReleaseNotes="";
-            Status="Suche nach signierten GitHub-Updates …";
-            using var request=new HttpRequestMessage(HttpMethod.Get,ReleasesApi);
-            request.Headers.UserAgent.ParseAdd("CharliVision/1.0");
-            using var response=await _http.SendAsync(request,token);
-            if(response.StatusCode==HttpStatusCode.NotFound){
-                Status="Update-Kanal noch nicht veröffentlicht.";
-                return;
-            }
-            response.EnsureSuccessStatusCode();
-            var bytes=await response.Content.ReadAsByteArrayAsync(token);
-            if(bytes.Length>262144)
-                throw new InvalidDataException("Release-Antwort zu groß.");
-            using var document=JsonDocument.Parse(bytes);
-            var root=document.RootElement;
-            var tag=root.GetProperty("tag_name").GetString()??"";
-            var version=tag.TrimStart('v','V');
-            var assets=root.GetProperty("assets");
-            if(!IsNewer(InstalledVersion,version)){
-                Status="Aktuell — Version "+InstalledVersion;
-                return;
-            }
-            var manifestUrl=FindAsset(assets,ManifestName);
-            var sigUrl=FindAsset(assets,SignatureName);
-            var raw=await SmallDownload(manifestUrl,token);
-            var signature=await SmallDownload(sigUrl,token);
-            if(!VerifySignedManifest(raw,signature))
-                throw new InvalidDataException("Ungültige Release-Signatur.");
-            var manifest=JsonSerializer.Deserialize<Manifest>(raw,
-                new JsonSerializerOptions{PropertyNameCaseInsensitive=true});
-            if(manifest is null ||
-               manifest.Version!=version ||
-               !IsNewer(InstalledVersion,manifest.Version) ||
-               manifest.Size<1 || manifest.Size>MaximumInstallerSize ||
-               manifest.Sha256.Length!=64 ||
-               !manifest.Sha256.All(Uri.IsHexDigit) ||
-               !manifest.FileName.Equals(
-                    $"CharliVision-{version}-Setup-x64.exe",StringComparison.Ordinal))
-                throw new InvalidDataException("Unzulässiges signiertes Update.");
-            var packageUrl=FindAsset(assets,manifest.FileName);
-            _offer=new Offer(manifest,packageUrl);
-            AvailableVersion=version;
-            ReleaseNotes=root.TryGetProperty("body",out var body)
-                ?(body.GetString()??"")[..Math.Min(1600,(body.GetString()??"").Length)]:"";
-            Status="Update verfügbar — verifiziert: "+version;
-        }
-        catch(OperationCanceledException) when(!token.IsCancellationRequested){
-            _offer=null;
-            Status="Updateprüfung: Netzwerk-Zeitüberschreitung.";
-        }
-        catch(Exception ex) when(ex is not OperationCanceledException){
-            _offer=null;
+            if(found is null){Status="Aktuell — "+InstalledVersion;return;}
+            if(!SignedVisionSource.ValidAsset(found.TargetFullRelease) ||
+                !IsNewer(InstalledVersion,found.TargetFullRelease.Version.ToString()))
+                throw new InvalidDataException("Nicht zugelassenes Update.");
+            _manager=manager;_update=found;
+            AvailableVersion=found.TargetFullRelease.Version.ToString();
+            ReleaseNotes=found.TargetFullRelease.NotesMarkdown??"";
+            if(ReleaseNotes.Length>1600)ReleaseNotes=ReleaseNotes[..1600];
+            Status="Update verfügbar — Signatur verifiziert: "+AvailableVersion;
+        }catch(Exception ex) when(ex is not OperationCanceledException){
+            _update=null;_lastChecked=DateTime.UtcNow.AddHours(-17);
             Status="Updateprüfung fehlgeschlagen: "+ex.Message;
             SettingsStore.Log(ex);
-        }
-        finally{_gate.Release();}
+        }finally{_gate.Release();}
     }
     public async Task<bool> DownloadAndStartInstallerAsync(
         IProgress<(long received,long total)>? progress=null,
         CancellationToken token=default)
     {
-        if(_offer is not Offer offer)return false;
         await _gate.WaitAsync(token);
-        string? temporary=null;
         try{
-            Status="Wird heruntergeladen …";
-            string directory=Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "CharliVision","Updates",offer.Manifest.Version);
-            Directory.CreateDirectory(directory);
-            string target=Path.Combine(directory,offer.Manifest.FileName);
-            temporary=target+".part";
-            using var request=new HttpRequestMessage(HttpMethod.Get,offer.Url);
-            request.Headers.UserAgent.ParseAdd("CharliVision/1.0");
-            using var response=await _http.SendAsync(request,
-                HttpCompletionOption.ResponseHeadersRead,token);
-            response.EnsureSuccessStatusCode();
-            using var input=await response.Content.ReadAsStreamAsync(token);
-            using var output=new FileStream(temporary,FileMode.Create,
-                FileAccess.Write,FileShare.None,81920,true);
-            using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            byte[] buffer=new byte[81920];
-            long total=0;
-            int n;
-            while((n=await input.ReadAsync(buffer,token))>0){
-                total+=n;
-                if(total>offer.Manifest.Size)
-                    throw new InvalidDataException("Download größer als Freigabe.");
-                await output.WriteAsync(buffer.AsMemory(0,n),token);
-                hash.AppendData(buffer,0,n);
-                progress?.Report((total,offer.Manifest.Size));
-            }
-            await output.FlushAsync(token);
-            if(total!=offer.Manifest.Size ||
-               !Convert.ToHexString(hash.GetHashAndReset()).Equals(
-                    offer.Manifest.Sha256,StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("Installer-Prüfsumme falsch.");
-            output.Close();
-            File.Move(temporary,target,true);
-            temporary=null;
-            Status="Verifiziert — Installation wird gestartet";
-            _ = Process.Start(new ProcessStartInfo{
-                FileName=target,UseShellExecute=true,
-                Arguments="/NORESTART /CLOSEAPPLICATIONS"
-            }) ?? throw new InvalidOperationException("Installer konnte nicht starten.");
+            if(_update is not UpdateInfo update || _manager is not UpdateManager manager)
+                return false;
+            Status="Signierte Updatepakete werden geladen …";
+            await manager.DownloadUpdatesAsync(update,
+                p=>progress?.Report((Math.Clamp(p,0,100),100)),token);
+            token.ThrowIfCancellationRequested();
+            Status="Updatepaket geprüft — Neustart wird vorbereitet";
+            manager.WaitExitThenApplyUpdates(update.TargetFullRelease,
+                silent:false,restart:true);
             return true;
-        }catch(OperationCanceledException) when(!token.IsCancellationRequested){
-            Status="Update-Download: Netzwerk-Zeitüberschreitung.";
-            return false;
         }catch(Exception ex) when(ex is not OperationCanceledException){
             Status="Update fehlgeschlagen: "+ex.Message;
-            SettingsStore.Log(ex);
-            return false;
-        }finally{
-            if(temporary is not null)
-                try{File.Delete(temporary);}catch{}
-            _gate.Release();
-        }
+            SettingsStore.Log(ex);return false;
+        }finally{_gate.Release();}
     }
 }
