@@ -2,7 +2,15 @@
 
 Eigenständige und kostenlose Windows-Desktop-Musikvisualisierung für Spotify mit rotierender Vinyl-Disc, Audio-Visualizer, dynamischen Albumfarben, Lyrics und Karaoke.
 
-## Aktueller Release v1.6.0 — ULTIMATE LYRICS V7
+## V11 - Velopack Update-System (1.7.4)
+
+- Die Versionspruefung verwendet die konkrete stabile GitHub-Release-Adresse ohne REST-API-Abfrage. Signierter Index und Paketdownloads bleiben auf dieselbe Version beschraenkt.
+- RSA-PSS, SHA-256, Paketidentitaet und drei begrenzte Pruefversuche; keine Zugangstokens im Client.
+- 137 lokale Selbsttests bestanden; produktives Update 1.7.2 auf 1.7.3 verifiziert. Die Freigabe von 1.7.4 erfordert den unabhängigen Windows-Build, Installationstest und lokal verifizierte Release-Signaturen.
+- [Aktueller Release](https://github.com/yousefayat732-prog/Charli-Vision/releases/latest). Bestehende Velopack-Nutzer aktualisieren in der App; Altinstallationen bis 1.6.0 verwenden den versionsspezifischen Migrationsinstaller.
+- Die Release-Signaturen ersetzen keine Windows-Authenticode-Signatur. Es wurde noch kein vertrauenswuerdiges Codesignaturzertifikat bereitgestellt.
+
+## Vorheriger Release v1.6.0 — ULTIMATE LYRICS V7
 
 - **Erweiterter kostenloser Lyrics-Fallback:** Nach LRCLIB kann der dokumentierte öffentliche Better-Lyrics-Cache nach tatsächlich zeitcodierten Lyrics suchen. Keine YouTube-Anmeldedaten, Scraping-Routinen oder bezahlten Schlüssel erforderlich; nicht gecachte Titel können weiterhin ohne Treffer bleiben.
 - **Native WPF-Wortsynchronisierung:** Der sichere TTML-Parser übernimmt nur vorhandene Zeitmarken; die bisherigen Word-, Line- und Plain-Lyrics-Darstellungen bleiben erhalten.

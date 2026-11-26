@@ -26,9 +26,10 @@ internal sealed class SignedVisionSource : IUpdateSource
     internal const string AppId="CharliVision.Desktop";
     private IUpdateSource? _inner;
 #endif
-    private const string ReleasesApi="https://api.github.com/repos/yousefayat732-prog/Charli-Vision/releases/latest";
+    private const string LatestPage="https://github.com/yousefayat732-prog/Charli-Vision/releases/latest";
     private const string ReleasePrefix="https://github.com/yousefayat732-prog/Charli-Vision/releases/download/";
     private static readonly HttpClient Http=new(){Timeout=TimeSpan.FromSeconds(30)};
+    private static readonly HttpClient RedirectHttp=new(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(15)};
     private VelopackAsset[] _trusted=Array.Empty<VelopackAsset>();
 
     internal static string StableReleaseBase(string? tag)
@@ -39,15 +40,28 @@ internal sealed class SignedVisionSource : IUpdateSource
             throw new InvalidDataException("Invalid stable release tag.");
         return ReleasePrefix+tag+"/";
     }
-    internal static bool PublishedAsset(JsonElement assets,VelopackAsset asset,string releaseBase)
+    internal static string StableRedirectTag(Uri? location)
     {
-        return assets.EnumerateArray().Any(item=>
-            item.GetProperty("name").GetString()==asset.FileName &&
-            item.GetProperty("size").GetInt64()==asset.Size &&
-            item.GetProperty("browser_download_url").GetString()==releaseBase+asset.FileName &&
-            (!item.TryGetProperty("digest",out var digest) ||
-             digest.ValueKind==JsonValueKind.Null ||
-             string.Equals(digest.GetString(),"sha256:"+asset.SHA256,StringComparison.OrdinalIgnoreCase)));
+        var latest=new Uri(LatestPage);
+        if(location is null)throw new InvalidDataException("Missing stable release redirect.");
+        Uri target=location.IsAbsoluteUri?location:new Uri(latest,location);
+        const string prefix="/yousefayat732-prog/Charli-Vision/releases/tag/";
+        if(target.Scheme!=Uri.UriSchemeHttps ||
+            !target.Host.Equals("github.com",StringComparison.OrdinalIgnoreCase) ||
+            !target.IsDefaultPort || target.UserInfo.Length!=0 ||
+            target.Query.Length!=0 || target.Fragment.Length!=0 ||
+            !target.AbsolutePath.StartsWith(prefix,StringComparison.Ordinal))
+            throw new InvalidDataException("Untrusted stable release redirect.");
+        string tag=target.AbsolutePath[prefix.Length..];
+        StableReleaseBase(tag);
+        return tag;
+    }
+    internal static bool BelongsToRelease(VelopackAsset a,string tag)
+    {
+        string type=a.Type.ToString();
+        return ValidAsset(a) && "v"+a.Version.ToString()==tag &&
+            (type=="Full" || type=="Delta") &&
+            a.FileName==AppId+"-"+a.Version+"-"+type.ToLowerInvariant()+".nupkg";
     }
     private static async Task<byte[]> ReadBounded(Stream input)
     {
@@ -63,7 +77,7 @@ internal sealed class SignedVisionSource : IUpdateSource
     private static async Task<byte[]> ReadUrl(string url)
     {
         using var request=new HttpRequestMessage(HttpMethod.Get,url);
-        request.Headers.UserAgent.ParseAdd("CharliVision/1.7.3");
+        request.Headers.UserAgent.ParseAdd("CharliVision/1.7.4");
         request.Headers.CacheControl=new CacheControlHeaderValue{NoCache=true,MaxAge=TimeSpan.Zero};
         using var response=await Http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
@@ -72,14 +86,17 @@ internal sealed class SignedVisionSource : IUpdateSource
         using var input=await response.Content.ReadAsStreamAsync();
         return await ReadBounded(input);
     }
-    private static async Task<(string Tag,string Base,JsonElement Assets)> ResolveRelease()
+    private static async Task<(string Tag,string Base)> ResolveRelease()
     {
-        using var json=JsonDocument.Parse(await ReadUrl(ReleasesApi));
-        var root=json.RootElement;
-        if(root.GetProperty("draft").GetBoolean() || root.GetProperty("prerelease").GetBoolean())
-            throw new InvalidDataException("Release is not stable.");
-        string tag=root.GetProperty("tag_name").GetString()??"";
-        return (tag,StableReleaseBase(tag),root.GetProperty("assets").Clone());
+        using var request=new HttpRequestMessage(HttpMethod.Head,LatestPage);
+        request.Headers.UserAgent.ParseAdd("CharliVision/1.7.4");
+        request.Headers.CacheControl=new CacheControlHeaderValue{NoCache=true,MaxAge=TimeSpan.Zero};
+        using var response=await RedirectHttp.SendAsync(request,HttpCompletionOption.ResponseHeadersRead);
+        int code=(int)response.StatusCode;
+        if(code!=301 && code!=302 && code!=303 && code!=307 && code!=308)
+            throw new InvalidDataException("No stable release redirect returned.");
+        string tag=StableRedirectTag(response.Headers.Location);
+        return (tag,StableReleaseBase(tag));
     }
     internal static bool ValidAsset(VelopackAsset a)=>
         a.PackageId==AppId && a.FileName==Path.GetFileName(a.FileName) &&
@@ -133,7 +150,7 @@ internal sealed class SignedVisionSource : IUpdateSource
                 var signatureTask=ReadUrl(release.Base+filename+".sig");
                 await Task.WhenAll(rawTask,signatureTask);
                 var signed=Authenticate(await rawTask,await signatureTask);
-                var verified=signed.Assets.Where(a=>PublishedAsset(release.Assets,a,release.Base)).ToArray();
+                var verified=signed.Assets.Where(a=>BelongsToRelease(a,release.Tag)).ToArray();
                 if(!verified.Any(a=>a.Type.ToString()=="Full" && "v"+a.Version.ToString()==release.Tag))
                     throw new InvalidDataException("Signiertes Vollpaket der Release-Version fehlt.");
                 _inner=new SimpleWebSource(release.Base);

@@ -1482,22 +1482,22 @@ public static class SelfTests
             }
             return true;
         });
-        Check("Updater: release asset must match signed name, size, tag URL and digest",()=>{
-            var a=new Velopack.VelopackAsset{
-                FileName="CharliVision.Desktop-1.7.2-full.nupkg",Size=123,
-                SHA256=new string('A',64)
-            };
-            var url=SignedVisionSource.StableReleaseBase("v1.7.2");
-            bool Match(string u,long size,string hash){
-                using var j=System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new[]{
-                    new{name=a.FileName,size,browser_download_url=u,digest="sha256:"+hash}
-                }));
-                return SignedVisionSource.PublishedAsset(j.RootElement,a,url);
+        Check("Updater: stable redirect is repository-bound and API-independent",()=>{
+            const string root="https://github.com/yousefayat732-prog/Charli-Vision/releases/tag/";
+            if(SignedVisionSource.StableRedirectTag(new Uri(root+"v1.7.3"))!="v1.7.3")return false;
+            foreach(var url in new[]{"http://github.com/yousefayat732-prog/Charli-Vision/releases/tag/v1.7.3",
+                "https://example.com/yousefayat732-prog/Charli-Vision/releases/tag/v1.7.3",
+                "https://github.com/other/repo/releases/tag/v1.7.3",root+"v1.7.3-beta",root+"v1.7.3?x=1"}){
+                try{SignedVisionSource.StableRedirectTag(new Uri(url));return false;}
+                catch(System.IO.InvalidDataException){}
             }
-            return Match(url+a.FileName,123,a.SHA256) &&
-                !Match(url+a.FileName,124,a.SHA256) &&
-                !Match(url+a.FileName,123,new string('B',64)) &&
-                !Match(SignedVisionSource.StableReleaseBase("v1.7.1")+a.FileName,123,a.SHA256);
+            return true;
+        });
+        Check("Updater: signed package must belong to exact stable release",()=>{
+            var json="{\"Assets\":[{\"PackageId\":\""+SignedVisionSource.AppId+"\",\"Version\":\"1.7.3\",\"Type\":\"Full\",\"FileName\":\""+SignedVisionSource.AppId+"-1.7.3-full.nupkg\",\"SHA1\":\""+new string('A',40)+"\",\"SHA256\":\""+new string('B',64)+"\",\"Size\":123}]}";
+            var a=Velopack.VelopackAssetFeed.FromJson(json).Assets[0];
+            return SignedVisionSource.BelongsToRelease(a,"v1.7.3") &&
+                !SignedVisionSource.BelongsToRelease(a,"v1.7.2");
         });
         Check("Updater: strict version checks and no automatic installation",()=>{
             return VisionUpdateService.IsNewer("1.0.0","1.0.1") &&
