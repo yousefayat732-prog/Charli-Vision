@@ -1,0 +1,66 @@
+name: Independent Windows installation QA
+on:
+  push:
+    branches: [feature/vision-v10-v11]
+    paths: ['.github/workflows/v11-clean-install.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  clean-install:
+    if: github.repository == 'yousefayat732-prog/Charli-Vision'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download independently built v1.7.2 package
+        uses: actions/download-artifact@v4
+        with:
+          name: vision-unsigned-candidate
+          run-id: '45729910320'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/vision-install-qa
+      - name: Test clean installation and executable integrity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'vision-install-qa'
+          $setup = Join-Path $root 'CharliVision.Desktop-win-Setup.exe'
+          $installed = Join-Path $env:LOCALAPPDATA 'CharliVision.Desktop/current/CharliVision.exe'
+          if (Test-Path $installed) { throw 'Runner was not clean' }
+          $feed = Get-Content "$root/releases.win.json" -Raw | ConvertFrom-Json
+          $asset = @($feed.Assets | Where-Object {$_.Type -eq 'Full' -and $_.Version -eq '1.7.2'})
+          if ($asset.Count -ne 1) { throw 'Missing full package' }
+          $package = Join-Path $root $asset[0].FileName
+          if ((Get-FileHash $package).Hash -ne $asset[0].SHA256) { throw 'Bad package hash' }
+          $process = Start-Process $setup -ArgumentList '--silent' -PassThru
+          if (!$process.WaitForExit(120000)) { throw 'Installer did not finish' }
+          if ($process.ExitCode -ne 0) { throw "Installer exit $($process.ExitCode)" }
+          for ($i=0;$i -lt 40 -and !(Test-Path $installed);$i++) { Start-Sleep -Milliseconds 500 }
+          if (!(Test-Path $installed)) { throw 'Installed executable missing' }
+          if ((Get-Item $installed).VersionInfo.FileVersion -ne '1.7.2.0') { throw 'Wrong installed version' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead($package)
+          try {
+            $entry = @($zip.Entries | Where-Object { $_.FullName -match '(^|/)CharliVision.exe$' })
+            if ($entry.Count -ne 1) { throw 'Unexpected application entries' }
+            $expected = Join-Path $root 'expected-exe.bin'
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($entry[0],$expected,$true)
+            if ((Get-FileHash $installed).Hash -ne (Get-FileHash $expected).Hash) { throw 'Installed binary hash differs' }
+          } finally { $zip.Dispose() }
+          Write-Host 'CLEAN_WINDOWS_VM_INSTALL=PASS; INSTALLED_EXE_HASH=PASS'
+          $test = Start-Process $installed -ArgumentList '--self-test' -PassThru
+          if (!$test.WaitForExit(90000)) { throw 'Selftest did not finish' }
+          if ($test.ExitCode -ne 0) { throw "Selftest exit $($test.ExitCode)" }
+          $report = Join-Path $env:APPDATA 'CharliVision/self-test.txt'
+          $rows = Get-Content $report
+          $pass = @($rows | Where-Object {$_ -like 'PASS:*'}).Count
+          $fail = @($rows | Where-Object {$_ -like 'FAIL:*'}).Count
+          if ($pass -lt 134 -or $fail -ne 0) { throw 'Selftest regression' }
+          Write-Host "INSTALLED_SELFTEST_PASS=$pass; FAIL=$fail"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clean-install-qa-report
+          path: ${{ env.APPDATA }}/CharliVision/self-test.txt
+          if-no-files-found: ignore
