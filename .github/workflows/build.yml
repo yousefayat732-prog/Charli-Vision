@@ -2,7 +2,7 @@ name: Windows candidate build
 on:
   workflow_dispatch:
   push:
-    branches: [main, feature/vision-v10-v11]
+    branches: [main, feature/vision-v10-v11, fix/v11-consistent-release-feed]
   pull_request:
 permissions:
   contents: read
@@ -42,6 +42,25 @@ jobs:
             $path = Join-Path $root $asset.FileName
             if ((Get-FileHash $path).Hash -ne $asset.SHA256 -or (Get-Item $path).Length -ne $asset.Size) { throw 'Package verification failed' }
           }
+      - name: Verify clean candidate installation and self-tests
+        if: github.ref == 'refs/heads/fix/v11-consistent-release-feed'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "${{ runner.temp }}/vision-packages"
+          $setup = Join-Path $root 'CharliVision.Desktop-win-Setup.exe'
+          $exe = Join-Path $env:LOCALAPPDATA 'CharliVision.Desktop/current/CharliVision.exe'
+          if (Test-Path $exe) { throw 'Runner was not clean' }
+          $process = Start-Process $setup -ArgumentList '--silent' -PassThru
+          if (!$process.WaitForExit(120000) -or $process.ExitCode -ne 0) { throw 'Installer failed' }
+          if (!(Test-Path $exe) -or (Get-Item $exe).VersionInfo.FileVersion -ne '1.7.3.0') { throw 'Wrong installed version' }
+          $test = Start-Process $exe -ArgumentList '--self-test' -PassThru
+          if (!$test.WaitForExit(90000) -or $test.ExitCode -ne 0) { throw 'Self-tests failed' }
+          $rows = Get-Content "$env:APPDATA/CharliVision/self-test.txt"
+          $pass = @($rows | Where-Object {$_ -like 'PASS:*'}).Count
+          $fail = @($rows | Where-Object {$_ -like 'FAIL:*'}).Count
+          if ($pass -lt 136 -or $fail -ne 0) { throw 'Self-test regression' }
+          Write-Host "CLEAN_CANDIDATE_INSTALL=PASS; SELF_TESTS=$pass; FAIL=$fail"
       - uses: actions/upload-artifact@v4
         with:
           name: vision-unsigned-candidate

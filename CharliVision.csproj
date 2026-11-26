@@ -7,9 +7,9 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>CharliVision</AssemblyName>
-    <Version>1.7.2</Version>
-    <AssemblyVersion>1.7.2.0</AssemblyVersion>
-    <FileVersion>1.7.2.0</FileVersion>
+    <Version>1.7.3</Version>
+    <AssemblyVersion>1.7.3.0</AssemblyVersion>
+    <FileVersion>1.7.3.0</FileVersion>
     <ApplicationIcon>CharliVision.ico</ApplicationIcon>
     <StartupObject>CharliVision.Program</StartupObject>
   </PropertyGroup>
