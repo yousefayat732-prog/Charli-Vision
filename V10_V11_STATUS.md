@@ -23,3 +23,13 @@ Status: local candidate, not a stable release.
 5. Only then publish stable release. Upload signed releases.win.json and detached signature together with the matching full/delta assets. Keep private signing key outside source and CI artifacts.
 
 No Authenticode certificate is available; the installer is unsigned by Windows. Release metadata signing is separate. No all-song lyrics or zero-stutter guarantee. No new paid service. Production 1.6.0 remains unchanged pending gates.
+
+## Production release validation — 2026-11-26
+- Direct migration from 1.6.0 to production Velopack 1.7.0 PASS, original settings, shortcuts, autostart and legacy rollback files retained. Earlier Inno migration wrapper failed safely; replacement .NET migration launcher passed isolated QA.
+- Signed public GitHub releases v1.7.0, v1.7.1, v1.7.2 created by verified Windows build pipeline. Remote SHA-256 asset digests matched signed metadata; private RSA key never left local machine.
+- Public UI-driven A→B and B→C updates PASS, both downloaded through actual app and automatically restarted; user settings and existing cache file preserved each time. GitHub latest-alias metadata and signature propagation lag temporarily caused safe rejection or stale "current" status; retry and fresh process required. Do not claim first-attempt success or guaranteed immediate update discovery.
+- Independent GitHub Windows runner clean install of 1.7.2, installed binary hash and 134 self-tests PASS (run 45731062675); not a second physical PC.
+- Production Spotify live diagnostic: 126.67 seconds; 42/42 fresh samples playing, visible native lyrics renderer and valid clock. Overlay fully occluded in every sample. Final callback P95 12.34ms.
+- Separate visible synthetic Cinematic vinyl benchmark: 126.49 seconds, PASS; mean 16.98ms, P95 31.91ms, P99 34.27ms, max 40.52ms, 927 estimated misses. No GPU-present or zero-stutter claim.
+- No Authenticode code-signing certificate was present; the Windows setup is not Authenticode-signed. RSA-PSS update signatures are separate.
+- Production final version 1.7.2 verified running; prior installation retained for rollback. No changes to Charli Chexx.
