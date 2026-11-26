@@ -1,0 +1,140 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+using System.Threading;
+using System.Windows.Forms;
+using Microsoft.Win32;
+
+internal static class MigrationBridge
+{
+    private const string TargetVersion="__VERSION__";
+#if QA
+    private const string AppId="CharliVision.V11.QA";
+    private const string DataName="CharliVision-V11-QA";
+    private const string MutexName=@"Local\CharliVisionV11QA";
+    private const string LinkName="Charli Vision V11 QA";
+    private const string RunName="CharliVisionV11QA";
+#else
+    private const string AppId="CharliVision.Desktop";
+    private const string DataName="CharliVision";
+    private const string MutexName=@"Local\CharliVisionStandaloneApp";
+    private const string LinkName="Charli Vision";
+    private const string RunName="CharliVision";
+#endif
+    private static readonly string Local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private static readonly string Roaming=Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    private static readonly string Current=Path.Combine(Local,AppId,"current","CharliVision.exe");
+    private static readonly string Old=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Apps","CharliVision","CharliVision.exe");
+    private static readonly string RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run";
+    private static readonly string[] Links={
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),LinkName+".lnk"),
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),LinkName+".lnk")
+    };
+    private static void CopyDirectory(string source,string destination)
+    {
+        if(!Directory.Exists(source))return;
+        Directory.CreateDirectory(destination);
+        foreach(string file in Directory.GetFiles(source)){
+            if((File.GetAttributes(file)&FileAttributes.ReparsePoint)!=0)continue;
+            File.Copy(file,Path.Combine(destination,Path.GetFileName(file)),true);
+        }
+        foreach(string dir in Directory.GetDirectories(source)){
+            if((File.GetAttributes(dir)&FileAttributes.ReparsePoint)!=0)continue;
+            CopyDirectory(dir,Path.Combine(destination,Path.GetFileName(dir)));
+        }
+    }
+    private static bool IsSilent(string[] args)
+    {
+        foreach(string arg in args)
+            if(arg.Equals("/VERYSILENT",StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("--silent",StringComparison.OrdinalIgnoreCase))return true;
+        return false;
+    }
+    private static void WaitForOldApp()
+    {
+        Mutex mutex;
+        if(!Mutex.TryOpenExisting(MutexName,out mutex))return;
+        using(mutex){
+            bool held=false;
+            try{
+                try{held=mutex.WaitOne(TimeSpan.FromSeconds(25));}
+                catch(AbandonedMutexException){held=true;}
+                if(!held)throw new InvalidOperationException("Bitte Charli Vision im Infobereich beenden und die Installation erneut starten.");
+            }finally{if(held)mutex.ReleaseMutex();}
+        }
+    }
+    private static void Link(string path)
+    {
+        dynamic shell=Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+        dynamic shortcut=shell.CreateShortcut(path);
+        shortcut.TargetPath=Current;
+        shortcut.WorkingDirectory=Path.GetDirectoryName(Current);
+        shortcut.IconLocation=Current+",0";
+        shortcut.Save();
+    }
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        bool silent=IsSilent(args);
+        string tmp=Path.Combine(Path.GetTempPath(),"VisionMigration-"+Guid.NewGuid().ToString("N"));
+        string backup=null,oldRun=null;
+        bool changed=false;
+        try{
+            if(File.Exists(Current)){
+                var installed=new Version(FileVersionInfo.GetVersionInfo(Current).FileVersion);
+                var target=new Version(TargetVersion+".0");
+                if(installed>=target){Process.Start(Current);return 0;}
+                throw new InvalidOperationException("Velopack ist bereits installiert. Bitte den Update-Button in Charli Vision benutzen.");
+            }
+            if(!silent && MessageBox.Show("Charli Vision "+TargetVersion+" mit Velopack installieren? Einstellungen und lokale Lyrics bleiben erhalten. Die alte Installation wird nicht gelöscht.",
+                "Charli Vision",MessageBoxButtons.OKCancel,MessageBoxIcon.Information)!=DialogResult.OK)return 2;
+            WaitForOldApp();
+            backup=Path.Combine(Local,"CharliVisionMigrationBackups",DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,8));
+            Directory.CreateDirectory(backup);
+            CopyDirectory(Path.Combine(Roaming,DataName),Path.Combine(backup,"UserData"));
+            for(int i=0;i<Links.Length;i++)if(File.Exists(Links[i]))File.Copy(Links[i],Path.Combine(backup,i+".lnk"));
+            using(var reg=Registry.CurrentUser.OpenSubKey(RunKey))oldRun=reg==null?null:reg.GetValue(RunName) as string;
+            if(oldRun!=null)File.WriteAllText(Path.Combine(backup,"Autostart.txt"),oldRun);
+            Directory.CreateDirectory(tmp);
+            string payload=Path.Combine(tmp,"Velopack-Setup.exe");
+            using(var input=Assembly.GetExecutingAssembly().GetManifestResourceStream("VisionSetup"))
+            using(var output=File.Create(payload)){
+                if(input==null)throw new InvalidDataException("Installationspaket fehlt.");
+                input.CopyTo(output);
+            }
+            changed=true;
+            using(var setup=Process.Start(new ProcessStartInfo(payload,"--silent"){UseShellExecute=false})){
+                if(setup==null || !setup.WaitForExit(120000) || setup.ExitCode!=0)
+                    throw new InvalidOperationException("Velopack-Setup fehlgeschlagen.");
+            }
+            for(int i=0;i<40&&!File.Exists(Current);i++)Thread.Sleep(500);
+            if(!File.Exists(Current) || FileVersionInfo.GetVersionInfo(Current).FileVersion!=TargetVersion+".0")
+                throw new InvalidDataException("Installierte Version konnte nicht verifiziert werden.");
+            foreach(string link in Links)Link(link);
+            if(oldRun!=null && oldRun.IndexOf(Old,StringComparison.OrdinalIgnoreCase)>=0)
+                using(var reg=Registry.CurrentUser.CreateSubKey(RunKey))reg.SetValue(RunName,"\""+Current+"\"");
+            if(!silent)Process.Start(Current);
+            File.WriteAllText(Path.Combine(backup,"MigrationResult.txt"),"PASS "+TargetVersion);
+            return 0;
+        }catch(Exception ex){
+            try{
+                if(changed&&backup!=null){
+                    for(int i=0;i<Links.Length;i++){
+                        string saved=Path.Combine(backup,i+".lnk");
+                        if(File.Exists(saved))File.Copy(saved,Links[i],true);
+                    }
+                    using(var reg=Registry.CurrentUser.CreateSubKey(RunKey)){
+                        if(oldRun!=null)reg.SetValue(RunName,oldRun);
+                        else reg.DeleteValue(RunName,false);
+                    }
+                }
+                if(backup!=null)File.WriteAllText(Path.Combine(backup,"MigrationResult.txt"),"FAIL "+ex.Message);
+            }catch{}
+            if(!silent)MessageBox.Show(ex.Message,"Charli Vision – Installation",MessageBoxButtons.OK,MessageBoxIcon.Error);
+            return 1;
+        }finally{
+            try{if(Directory.Exists(tmp))Directory.Delete(tmp,true);}catch{}
+        }
+    }
+}

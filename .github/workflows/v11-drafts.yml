@@ -1,0 +1,91 @@
+name: V11 draft release packaging
+on:
+  push:
+    branches: [feature/vision-v10-v11]
+    paths: ['.github/workflows/v11-drafts.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    if: github.repository == 'yousefayat732-prog/Charli-Vision' && github.ref == 'refs/heads/feature/vision-v10-v11'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build the reviewed release commits
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'vision-drafts'
+          New-Item "$root/packages","$root/snapshots","$root/publish" -ItemType Directory -Force | Out-Null
+          $template = Get-Content installer/MigrationBridge.cs.txt -Raw
+          $commits = [ordered]@{
+            '1.7.0' = 'e6e875a78648851264e36873f65f8af02f287f7d'
+            '1.7.1' = 'a6b41b0c31d6b308fefc6c12513fd444de319dd6'
+            '1.7.2' = 'cff9916'
+          }
+          dotnet tool install -g vpk --version 1.2.161
+          if ($LASTEXITCODE -ne 0) { throw 'Velopack install failed' }
+          $csc = "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+          if (!(Test-Path $csc)) { throw 'Framework compiler missing' }
+          foreach ($v in $commits.Keys) {
+            git checkout --detach $commits[$v]
+            if ($LASTEXITCODE -ne 0) { throw 'Review commit checkout failed' }
+            $commit = (git rev-parse HEAD).Trim()
+            $publish = "$root/publish/$v"
+            dotnet publish CharliVision.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -o $publish
+            if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
+            if ((Get-Item "$publish/CharliVision.exe").VersionInfo.FileVersion -ne "$v.0") { throw 'Version mismatch' }
+            vpk pack -u CharliVision.Desktop -v $v -p $publish -e CharliVision.exe -o "$root/packages" -c win -r win-x64 --packTitle "Charli Vision" --packAuthors "Charli Vision" -i CharliVision.ico --delta BestSpeed
+            if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+            $snap = "$root/snapshots/$v"
+            New-Item $snap -ItemType Directory -Force | Out-Null
+            $payload = "$root/packages/CharliVision.Desktop-win-Setup.exe"
+            Copy-Item $payload "$snap/CharliVision.Desktop-win-Setup.exe"
+            $source = "$root/MigrationBridge.cs"
+            [IO.File]::WriteAllText($source,$template.Replace('__VERSION__',$v),[Text.UTF8Encoding]::new($false))
+            $bridge = "$snap/CharliVision-$v-Setup-x64.exe"
+            & $csc /nologo /target:winexe /platform:x64 /optimize+ /reference:System.Windows.Forms.dll /reference:Microsoft.CSharp.dll "/win32icon:$PWD/CharliVision.ico" "/resource:$payload,VisionSetup" "/out:$bridge" $source
+            if ($LASTEXITCODE -ne 0) { throw 'Bridge compiler failed' }
+            $manifest = [ordered]@{Version=$v;FileName=(Split-Path $bridge -Leaf);Sha256=(Get-FileHash $bridge).Hash;Size=(Get-Item $bridge).Length}
+            [IO.File]::WriteAllText("$snap/CharliVision-update.json",($manifest|ConvertTo-Json -Compress),[Text.UTF8Encoding]::new($false))
+            Copy-Item "$root/packages/releases.win.json" "$snap/releases.win.json"
+            $index = Get-Content "$snap/releases.win.json" -Raw | ConvertFrom-Json
+            foreach ($a in $index.Assets) {
+              $file = "$root/packages/$($a.FileName)"
+              if ((Get-FileHash $file).Hash -ne $a.SHA256 -or (Get-Item $file).Length -ne $a.Size) { throw 'Package hash invalid' }
+              if ($a.Version -eq $v) { Copy-Item $file $snap }
+            }
+            Set-Content "$snap/commit.txt" $commit -Encoding ascii
+            Write-Host "VERIFIED UNSIGNED DRAFT PACKAGE $v $commit"
+          }
+      - name: Upload to unpublished GitHub release drafts
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'vision-drafts'
+          foreach ($v in @('1.7.0','1.7.1','1.7.2')) {
+            $tag = "v$v"
+            $snap = "$root/snapshots/$v"
+            $commit = (Get-Content "$snap/commit.txt" -Raw).Trim()
+            $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              $info = $existing | ConvertFrom-Json
+              if (!$info.isDraft) { throw "Refusing to change published release $tag" }
+              if ($info.targetCommitish -ne $commit) { throw "Draft commit mismatch $tag" }
+            } else {
+              gh release create $tag --repo $env:GITHUB_REPOSITORY --draft --target $commit --title "CHARLI VISION $tag - V10 / V11" --notes "Unpublished V10/V11 candidate. Signatures must be added and verified locally before publication. Versions 1.7.1/1.7.2 are maintenance releases for consecutive public update validation."
+              if ($LASTEXITCODE -ne 0) { throw 'Draft creation failed' }
+            }
+            $files = @(Get-ChildItem $snap -File | Where-Object {$_.Name -ne 'commit.txt'} | ForEach-Object FullName)
+            gh release upload $tag --repo $env:GITHUB_REPOSITORY --clobber @files
+            if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed' }
+            Write-Host "DRAFT ASSETS UPLOADED $tag"
+          }
